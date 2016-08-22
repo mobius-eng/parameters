@@ -1,0 +1,78 @@
+#+TITLE: Parameters: parameter setting framework for Common Lisp
+#+AUTHOR: Alexey Cherkaev (mobius-eng)
+
+* Scientific computing and models
+One of the challenges with scientific computing and modelling
+(especially applied in engineering fields) is the sheer number of
+parameters each model must contain. Setting up the models might be a
+real challenge. Furthermore, it can be convenient for the model to
+conduct all the computation in SI units (or any other set, but the
+point is - a single set of units) for consistency, but inputs in SI
+units might be inconvenient (e.g. specifying something really heavy in
+kg or temperature in Kelvin).
+
+* Meet parameters
+
+Parameters is a library that helps to set up such models and also
+generates the interface (using Qt) for setting up the models.
+
+At the moment it is capabel of setting:
+- Single parameters :: simple parameters with a single value. For
+     example, mass, velocity, temperature, etc. Each parameter is
+     accompanied by name, id (for setting it in a model), units of
+     measure, transformer (to transform, for example, to different
+     units), constructor (if, for example, an integer value is
+     required; by default all parameter values are assumed
+     double-floats).
+- Perturbed parameters :: similar to single parameters, but an extra
+     value of perturbation is included: it adds some white noise at
+     the time of setting this parameter into the model.
+- Parameter containers :: these parameters contain other (simpler)
+     parameters. Container can represent the full model or part of
+     it. For example, a full model of an ideal gas state may include
+     volume, temperature, pressure and molarity.
+- Parameter options :: let the user choose between alternative
+     models. For example, it may let the user choose between ideal gas
+     model (for low pressures) and a real gas model (e. g. van der
+     Waals).
+
+Everything is defined using CLOS and thus user extensions are
+possible. The code is thoroughly documented (however, a proper manual
+and tutorial is still missing).
+
+* YAML configurations
+
+To simplify the input it is possible to specify model parameters in
+YAML file. The workflow consists of two steps:
+- Specify the defualt configuration in LISP code.
+- Use YAML configuration to adjust defualt configuration.
+
+This way the user does not need to specify the full model in
+YAML. Other capabilities and limitations:
+- YAML does not need to follow exact LISP names: it is possible to
+  specify the synonyms for ids to be used in YAML. This reduces
+  verobisity.
+- YAML must contain ASCII-characters only: the limitation steams from
+  the use of CL-YACLYAML library. It is one of the areas high on
+  priority list to be improved.
+
+* Interface
+
+Once the default configuration of the model is set, it is possible to
+set up the interface (using Qt) using =SHOW-MODEL= function or
+=PARAMETERS-INERFACE= package as simple as:
+
+#+BEGIN_SRC lisp
+  (show-model parameter-model)
+#+END_SRC
+
+* Future improvements
+
+The following needs improvements:
+- Complete set of tests
+- Test on different CL implementations (currently tested with SBCL)
+- Test on different platforms: Windows, Linux x86, Linux ARM (for
+  Raspberry Pi)
+- Improve YAML support: UTF-8 encoding and configuration save.
+- Improve interface: dialog placement.
+- Manual and tutorials
