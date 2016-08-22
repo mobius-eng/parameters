@@ -70,7 +70,7 @@ with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
     (with-slots (id name) object
       (setf id (make-keyword-id name)))))
 
-** Generics
+;; ** Generics
 (defgeneric instantiate-object (parameter)
   (:documentation
    "Instantiates object based on PARAMETER"))

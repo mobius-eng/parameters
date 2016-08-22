@@ -7,6 +7,7 @@
   :depends-on (#:parse-number
                #:cl-yaclyaml
                #:closer-mop
+               #:cl-arrows
                #:qtools #:qtcore #:qtgui)
   :serial t
   :components ((:file "package")
