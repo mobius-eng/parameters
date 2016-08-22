@@ -76,3 +76,7 @@ The following needs improvements:
 - Improve YAML support: UTF-8 encoding and configuration save.
 - Improve interface: dialog placement.
 - Manual and tutorials
+
+* License
+
+BSD license

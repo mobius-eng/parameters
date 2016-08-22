@@ -3,7 +3,7 @@
 (asdf:defsystem #:parameters
   :description "Generic parameter description"
   :author "Alexey Cherkaev (mobius-eng)"
-  :license "MIT"
+  :license "BSD"
   :depends-on (#:parse-number
                #:cl-yaclyaml
                #:closer-mop
