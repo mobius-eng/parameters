@@ -16,7 +16,7 @@ kg or temperature in Kelvin).
 Parameters is a library that helps to set up such models and also
 generates the interface (using Qt) for setting up the models.
 
-At the moment it is capabel of setting:
+At the moment it is capable of setting:
 - Single parameters :: simple parameters with a single value. For
      example, mass, velocity, temperature, etc. Each parameter is
      accompanied by name, id (for setting it in a model), units of
@@ -26,7 +26,8 @@ At the moment it is capabel of setting:
      double-floats).
 - Perturbed parameters :: similar to single parameters, but an extra
      value of perturbation is included: it adds some white noise at
-     the time of setting this parameter into the model.
+     the time of setting this parameter into the model (not fully
+     supported in interface and not tested yet!).
 - Parameter containers :: these parameters contain other (simpler)
      parameters. Container can represent the full model or part of
      it. For example, a full model of an ideal gas state may include
@@ -34,49 +35,57 @@ At the moment it is capabel of setting:
 - Parameter options :: let the user choose between alternative
      models. For example, it may let the user choose between ideal gas
      model (for low pressures) and a real gas model (e. g. van der
-     Waals).
+     Waals). It can also be used if a single parameter allows for
+     multiple units: the user can choose which units supply.
 
 Everything is defined using CLOS and thus user extensions are
-possible. The code is thoroughly documented (however, a proper manual
-and tutorial is still missing).
+possible. The code is thoroughly documented if anyone wants to extend
+it. Some formalization still needs to be done (e.g. what is the
+minimum implementation requirements are for something to be a 'parameter).
 
 * YAML configurations
 
 To simplify the input it is possible to specify model parameters in
 YAML file. The workflow consists of two steps:
 - Specify the defualt configuration in LISP code.
-- Use YAML configuration to adjust defualt configuration.
+- Use YAML configuration to adjust default configuration.
 
 This way the user does not need to specify the full model in
 YAML. Other capabilities and limitations:
 - YAML does not need to follow exact LISP names: it is possible to
   specify the synonyms for ids to be used in YAML. This reduces
   verobisity.
-- YAML must contain ASCII-characters only: the limitation steams from
-  the use of CL-YACLYAML library. It is one of the areas high on
-  priority list to be improved.
+- YAML must contain ASCII-characters only: the limitation comes from
+  the use of CL-YACLYAML library (needs improvement).
 
 * Interface
 
 Once the default configuration of the model is set, it is possible to
-set up the interface (using Qt) using =SHOW-MODEL= function or
+set up the interface (using Qt) using =SHOW-MODEL= function of
 =PARAMETERS-INERFACE= package as simple as:
 
 #+BEGIN_SRC lisp
   (show-model parameter-model)
 #+END_SRC
 
+* Tutorial
+See directory =documentation= for the tutorial on how to use
+=PARAMETERS= on an example problem. Actual source code for the
+tutorial is a part of the tests (=tests/parameters-tests.lisp=).
+
 * Future improvements
 
 The following needs improvements:
-- Complete set of tests
+- Complete set of tests: YAML
 - Test on different CL implementations (currently tested with SBCL)
 - Test on different platforms: Windows, Linux x86, Linux ARM (for
-  Raspberry Pi)
+  Raspberry Pi). Currently: tested on Windows & Linux ARM, most
+  probably will work on Linux x86.
 - Improve YAML support: UTF-8 encoding and configuration save.
-- Improve interface: dialog placement.
-- Manual and tutorials
+- Improve interface: dialog placement, object view.
+- Manual and tutorials: add more.
 
 * License
+Copyright (C) 2016, Alexey Cherkaev (mobius-eng)
 
-BSD license
+BSD license (see LICENSE file)
