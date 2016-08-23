@@ -1,0 +1,407 @@
+% Created 2016-08-23 Tue 15:27
+\documentclass[listings, a4paper, fleqn, pdftex, 12pt, openany, oneside, final]{memoir}
+\makeatletter
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{latexsym}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{bm}
+\usepackage{fourier}
+\usepackage[pdftex]{graphicx}
+\usepackage{subfig}
+\usepackage{color}
+\usepackage{natbib}
+\usepackage{hyperref}%[pdftex,colorlinks=true,citecolor=blue]{hyperref}
+\usepackage{lscape}
+\usepackage{soul}
+\usepackage{tabularx}
+\usepackage{booktabs}
+%\usepackage{listings}
+%\usepackage{listing}
+\usepackage{minted}
+\chapterstyle{verville}
+\beforechapskip=-17mm
+\textwidth=167mm
+\textheight=230mm
+\voffset=-10mm
+\oddsidemargin=-4mm
+\evensidemargin=-4mm
+%%%               Vectors                          %%%
+\renewcommand{\vec}[1]{\bm{#1}}
+\renewcommand{\Vec}[1]{\overline{#1}}
+\newcommand{\mat}[1]{\mathbf{#1}}
+\newcommand{\gmat}[1]{\vec{#1}}
+%%%     Products, derivatives etc.         %%%
+\newcommand{\vprod}[2]{\left[#1\times #2\right]}
+\newcommand{\sprod}[2]{#1\cdot #2}
+\newcommand{\der}[2]{\frac{d #1}{d #2}}
+\newcommand{\Der}[2]{\frac{d}{d #2}\left(#1\right)}
+\newcommand{\pder}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\Pder}[2]{\frac{\partial}{\partial #2}\left(#1\right)}
+\newcommand{\dder}[2]{\frac{\delta #1}{\delta #2}}
+\DeclareMathOperator{\grad}{grad}
+\DeclareMathOperator{\Div}{div}
+\DeclareMathOperator{\erfc}{erfc}
+\DeclareMathOperator{\Expect}{E}
+\DeclareMathOperator{\Var}{Var}
+\newcommand{\mean}[1]{\langle #1 \rangle}
+\newcommand{\const}{\mathop{\mathrm{const}}}
+\newcommand{\dimension}[1]{\left[\mathrm{#1}\right]}
+%%%     Project specific                         %%%
+\newcommand{\Diff}{\mathcal{D}}
+%%%%%%%%%%          Alexey's comments                       %%%%%%%%%%
+\newcommand{\alemph}[1]{\colorbox{yellow}{#1}}
+\newcommand{\red}[1]{{\color{red}#1}}
+\newcommand{\alnew}[1]{%\\ul{%
+  \textit{#1}%}%
+}
+%%%%%%%%%%    Hypothesis                                          %%%%%%%%%%
+\theoremstyle{definition}
+\newtheorem{hypothesis}{Hypothesis}
+%%%%% to avoid orphans and widows
+\widowpenalty3000
+\clubpenalty3000
+%%% Common Lisp shortcut for minted
+\newminted{cl}{}
+\makeatother
+\date{\today}
+\title{}
+\hypersetup{
+ pdfauthor={},
+ pdftitle={},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 24.5.1 (Org mode 8.3.5)}, 
+ pdflang={English}}
+\begin{document}
+
+\tableofcontents
+
+\chapter{Parameter container: complete example}
+\label{sec:orgheadline9}
+\section{Model}
+\label{sec:orgheadline6}
+\subsection{Description}
+\label{sec:orgheadline1}
+This model is based on plug-flow reactor example (Levenspiel, 1999;
+page 106). Plug flow reactor is proposed for the decomposition of
+phosphine
+\begin{equation*}
+4\mathrm{PH}_{3g }\to \mathrm{P}_{4(g)} + 6\mathrm{H}_{2}
+\end{equation*}
+Denote \(A = \mathrm{PH}_{3}\), \(B = \mathrm{P}_{4}\) and \(S =
+\mathrm{H}_{2}\). Reaction rate is defined using Arrhenius law
+\begin{equation}
+-r_{A}=kC_{A}
+\end{equation}
+with
+\begin{equation}
+k=k_{0} e^{-E/R(1/T-1/T_{0})}
+\end{equation}
+
+The volume of the reactor required to achieve the conversion \(X_{A}\) (mol
+of A after reactor / mol of A before) is defined by the equation
+(Levenspiel, 1999; equation 21):
+\begin{equation}
+V=\frac{F_{A0}}{kC_{A0}}\left[(1+\varepsilon_{A})\ln{\frac{1}{1-X_{A}}} -\varepsilon_{A}X_{A}\right]
+\end{equation}
+where \(F_{A0}\) is input flow rate of A and \(C_{A0}\) is initial concentration
+of A. Constant \(\varepsilon_{A}=(7-4)/4=0.75\) is defined via stoichiometry
+(fractional change in volume).
+
+Concentration can be determined from ideal gas law:
+\begin{equation}
+C_{A0}=\frac{p_{A0}}{RT}
+\end{equation}
+where \(p_{A0}\) is initial partial pressure of A, \(R\) is universal gas
+constant and \(T\) is operating temperature.
+
+This model can be used to estimate the volume of the reactor given
+economical constraints. A default parameters are provided as a
+guidence but are the subject to change (except for constant \(R\)).
+
+\begin{center}
+\begin{tabular}{lrl}
+Parameter & Default value & Units\\
+\hline
+\(k_{0}\) & 10 & 1/h\\
+\(E\) & 160 & kJ/mol\\
+\(T_{0}\) & 600 & C\\
+\(T\) & 650 & C\\
+\(F_{A0}\) & 40 & mol/h\\
+\(p\) & 4 & atm\\
+\(R\) & 8.314 & J/ mol K\\
+\end{tabular}
+\end{center}
+
+\subsection{Reaction rate representation}
+\label{sec:orgheadline2}
+First need to represent the temperature dependence of the rate
+constant
+
+\begin{minted}[]{common-lisp}
+(defconstant +universal-gas-constant+ 8.314d0
+  "Universal gas constant R=8.314 J/mol K")
+
+(defclass arrhenius-law ()
+  ((reference-rate-constant
+    :initarg :reference-rate-constant
+    :accessor reference-rate-constant
+    :documentation "Reference rate constant (k0)")
+   (activation-energy
+    :initarg :activation-energy
+    :accessor activation-energy
+    :documentation "Activation energy (Ea) in J/mol")
+   (reference-temperature
+    :initarg :reference-temperature
+    :accessor reference-temperature
+    :documentation "Reference temperature (T0) in K"))
+  (:documentation
+   "Arrhenius law of the reaction rate constant:
+    k(T) = k0 * exp[- E/R * (1/T - 1/T0)]"))
+
+(defmethod print-object ((object arrhenius-law) out)
+  (with-slots ((k0 reference-rate-constant)
+               (e activation-energy)
+               (t0 reference-temperature))
+      object
+    (print-unreadable-object (object out :type t)
+      (format out "~@<~:_k0 = ~A ~:_Ea = ~A J/mol ~:_T0 = ~A K~:>"
+              k0 e t0))))
+
+(defmethod rate-constant ((model arrhenius-law) temperature)
+  (with-accessors ((k0 reference-rate-constant)
+                   (e activation-energy)
+                   (t0 reference-temperature))
+      model
+    (* k0 (exp (- (* (/ e +universal-gas-constant+) (- (/ temperature) (/ t0))))))))
+\end{minted}
+
+\subsection{Ideal gas law}
+\label{sec:orgheadline3}
+To find the concentration from given pressure.
+
+\begin{minted}[]{common-lisp}
+(defun ideal-gas-concentration (pressure temperature)
+  "Calculates concentration (mol/m3) based in PRESSURE (Pa) and
+temperature (K) using ideal gas law: c = p / RT"
+  (/ pressure (* +universal-gas-constant+ temperature)))
+\end{minted}
+
+\subsection{Plug-flow reactor model for phosphine decomposition}
+\label{sec:orgheadline4}
+Plug flow reactor model is composed of the following parts:
+\begin{itemize}
+\item Inlet flow rate \(F_{A0}\),
+\item Final (target) conversion \(X_{A}\),
+\item Operating temperature \(T\),
+\item Operating pressure \(p\), and
+\item Reaction rate constant defined by Arrhenius law.
+\end{itemize}
+
+\begin{minted}[]{common-lisp}
+(defclass PFR-phosphine ()
+  ((inlet-flow-rate
+    :initarg :inlet-flow-rate
+    :documentation "F_A0 in mol/s"
+    :accessor inlet-flow-rate)
+   (final-conversion
+    :initarg :final-conversion
+    :accessor final-conversion
+    :documentation "Target conversion X_A")
+   (operating-temperature
+    :initarg :operating-temperature
+    :accessor operating-temperature
+    :documentation "PFR operating temperature (K)")
+   (operating-pressure
+    :initarg :operating-pressure
+    :accessor operating-pressure
+    :documentation "PFR operating pressure (Pa)")
+   (phosphine-decomposition-rate-constant
+    :initarg :rate-constant
+    :accessor phosphine-decomposition-rate-constant
+    :documentation
+    "Rate constant object specializing RATE-CONSTANT generic function"))
+  (:documentation
+   "Plug-flow-reactor for phosphine decomposition
+    4PH3 -> P4 + 6H2"))
+
+(defmethod print-object ((object PFR-phosphine) out)
+  (with-slots ((f inlet-flow-rate)
+               (x final-conversion)
+               (temperature operating-temperature)
+               (p operating-pressure)
+               (rate-expression phosphine-decomposition-rate-constant))
+      object
+    (print-unreadable-object (object out :type t)
+      (format out "~@<~:_F = ~A mol/s ~:_X = ~A ~:_T = ~A K ~:_p = ~A Pa~:>"
+              f x temperature p))))
+\end{minted}
+
+Calculate volume of the reactor:
+
+\begin{minted}[]{common-lisp}
+(defmethod PFR-phosphine-volume ((model pfr-phosphine))
+  (with-accessors ((f inlet-flow-rate)
+                   (x final-conversion)
+                   (temperature operating-temperature)
+                   (p operating-pressure)
+                   (rate phosphine-decomposition-rate-constant))
+      model
+    (let ((k (rate-constant rate temperature))
+          (eps 0.75d0)
+          (c (ideal-gas-concentration p temperature)))
+      (* (/ f (* k c))
+         (- (* (1+ eps) (log (/ (- 1 x))))
+            (* eps x))))))
+\end{minted}
+
+\subsection{Model parameters}
+\label{sec:orgheadline5}
+The model consists of a large number of parameters. Arrhenius law
+parameters are grouped together to form \texttt{ARRHENIUS-LAW} object and the
+rest: to form \texttt{PFR-PHOSPHINE}.
+
+Firts, Arrhenius law parameters:
+
+\begin{minted}[]{common-lisp}
+(defun make-phosphine-default-arrhenius-law ()
+  (parameter
+   :name "Arrhenius law for phosphine decomposition"
+   :id :rate-constant
+   :children
+   (list
+    (parameter
+     :name "Reference rate, k0"
+     :id :reference-rate-constant
+     :value 10d0
+     :units "1/h"
+     :value-transformer (lambda (x) (/ x 3600d0)))
+    (parameter
+     :name "Activation energy, Ea"
+     :id :activation-energy
+     :value 160d0
+     :units "kJ/mol"
+     :value-transformer (lambda (x) (* x 1000d0)))
+    (parameter
+     :name "Reference temperature, T0"
+     :id :reference-temperature
+     :value 650d0
+     :units "C"
+     :value-transformer (lambda (x) (+ x 273.15d0))))
+   :constructor (lambda (&rest args)
+                  (apply #'make-instance 'arrhenius-law args))))
+\end{minted}
+
+In PFR model parameters, to make things a bit more interesting and
+help with testing, temperature is provided as an option of temperature
+in either Celcius or Fahrenheit.
+
+\begin{minted}[]{common-lisp}
+(defun make-default-pfr-phosphine ()
+  (parameter
+   :name "PFR for phosphine decomposition"
+   :children
+   (list
+    (parameter
+     :name "Inlet flow rate"
+     :value 40d0
+     :units "mol/h"
+     :value-transformer (lambda (x) (/ x 3600d0)))
+    (parameter
+     :name "Final conversion"
+     :value 80d0
+     :units "%"
+     :value-transformer (lambda (x) (/ x 100d0)))
+    (parameter
+     :name "Operating temperature"
+     :options
+     (list
+      (parameter
+       :name "Operating temperature (C)"
+       :value 650d0
+       :units "C"
+       :value-transformer (lambda (x) (+ x 273.15d0)))
+      (parameter
+       :name "Operating temperature (F)"
+       :value 1202d0
+       :units "F"
+       :value-transformer (lambda (x) (+ 273.15d0 (* 5/9 (- x 32d0)))))))
+    (parameter
+     :name "Operating pressure"
+     :value 4.54d0
+     :units "atm"
+     :value-transformer (lambda (x) (* x 1.01d5)))
+    (make-phosphine-default-arrhenius-law))
+   :constructor (lambda (&rest args)
+                  (apply #'make-instance 'PFR-phosphine args))))
+\end{minted}
+
+\section{Tests}
+\label{sec:orgheadline7}
+Use FiveAM. Put all the tests into their own suite.
+\begin{minted}[]{common-lisp}
+(def-suite pfr-phosphine-suite)
+
+(in-suite pfr-phosphine-suite)
+\end{minted}
+
+Make sure \texttt{PARAMETER-VALUE} on \texttt{PARAMETER-CONTAINER} returns itself.
+\begin{minted}[]{common-lisp}
+(test test-parameter-container-value
+  (let ((arrhenius-law (make-phosphine-default-arrhenius-law)))
+    (is (eq (parameter-value arrhenius-law)
+            arrhenius-law))))
+\end{minted}
+
+Instantiated object is of the right type
+\begin{minted}[]{common-lisp}
+(test test-parameter-container-instantiate-object
+  (let ((arrhenius-law (make-phosphine-default-arrhenius-law)))
+    (let ((result (instantiate-object arrhenius-law)))
+      (is (typep result 'arrhenius-law)))))
+\end{minted}
+
+Container must instantiate objects recursively and the parameters
+must be properly adjusted
+\begin{minted}[]{common-lisp}
+(test test-composite-parameter-container-instantiate-object
+  (let ((pfr (make-default-pfr-phosphine)))
+    ;; Checks if it propogates and converts
+    (setf (parameter-value (parameter-ref pfr :inlet-flow-rate))
+          50d0)
+    (let ((result (instantiate-object pfr)))
+      (is (typep result 'PFR-phosphine))
+      (is (typep (phosphine-decomposition-rate-constant
+                  result)
+                 'arrhenius-law))
+      (is (approx= (inlet-flow-rate result) (/ 50d0 3600d0))))))
+\end{minted}
+
+Finally, this test combines the test on parameters and the model:
+compare the result with the result from Levenspiel, 1999; Example 5.5:
+\begin{minted}[]{common-lisp}
+(test test-pfr-volume "Compare result with Levenspiel's example"
+  (let* ((pfr-parameters (make-default-pfr-phosphine))
+         (pfr-model (instantiate-object pfr-parameters))
+         (volume (pfr-phosphine-volume pfr-model))
+         (levenspiel-result 0.148d0))
+    (is (approx= levenspiel-result volume :abstol 1d-3 :reltol 1d-3))))
+\end{minted}
+
+To run the tests:
+\begin{quote}
+(let ((\textbf{debug-on-error} t))
+  (run! 'pfr-phosphine-suite))
+\end{quote}
+
+\section{To run the interface}
+\label{sec:orgheadline8}
+To run the interface part, execute the following:
+\begin{quote}
+(parameters-interface:show-model (make-default-pfr-phosphine))
+\end{quote}
+\end{document}
