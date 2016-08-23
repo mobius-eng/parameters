@@ -85,6 +85,14 @@ The following needs improvements:
 - Improve interface: dialog placement, object view.
 - Manual and tutorials: add more.
 
+* Installation
+
+The library is not in Quicklisp yet. To install, clone the project to
+your =local-projects= folder of Quicklisp, start lisp and do
+#+BEGIN_SRC lisp
+  (ql:quickload :parameters)
+#+END_SRC
+
 * License
 Copyright (C) 2016, Alexey Cherkaev (mobius-eng)
 
