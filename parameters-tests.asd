@@ -8,6 +8,8 @@
   :serial t
   :components ((:module
                 "tests"
-                (:file "package")
-                (:file "parameters-tests"))))
+                :serial t
+                :components
+                ((:file "package")
+                 (:file "parameters-tests")))))
 

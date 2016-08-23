@@ -239,6 +239,13 @@ only for assigning them to right slots"))
   "Just returns itself as a value"
   object)
 
+
+;; Access parameter by id
+(defmethod parameter-ref ((parameter parameter-container) id)
+  "Get subparameter in parameter-container by id"
+  (with-slots (children) parameter
+    (find id children :key #'parameter-base-id)))
+
 ;; Constructor for =PARAMETER-CONTAINER= is slightly different: it takes
 ;; the (as =&rest=) plist of the form =(id1 instance1 id2 instance2 ...)=, in contrast
 ;; to single-value parameters (where it is just a function of value only).

@@ -13,6 +13,7 @@
            #:parameter-options #:parameter-options-options
            #:parameter-options-selection
            #:parameter-container #:parameter-container-children
+           #:parameter-ref
            #:single-parameter
            #:traverse-parameter))
 
