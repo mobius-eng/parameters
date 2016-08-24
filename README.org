@@ -77,10 +77,6 @@ tutorial is a part of the tests (=tests/parameters-tests.lisp=).
 
 The following needs improvements:
 - Complete set of tests: YAML
-- Test on different CL implementations (currently tested with SBCL)
-- Test on different platforms: Windows, Linux x86, Linux ARM (for
-  Raspberry Pi). Currently: tested on Windows & Linux ARM, most
-  probably will work on Linux x86.
 - Improve YAML support: UTF-8 encoding and configuration save.
 - Improve interface: dialog placement, object view.
 - Manual and tutorials: add more.
@@ -92,6 +88,14 @@ your =local-projects= folder of Quicklisp, start lisp and do
 #+BEGIN_SRC lisp
   (ql:quickload :parameters)
 #+END_SRC
+
+Was tested on: Windows x86-64 (SBCL), Linux x86-64 (SBCL & CCL), Linux
+ARM (Raspberry Pi 3, SBCL).
+
+PARAMETERS relly on QTOOLS library to construct the
+interface. Generally, QTOOLS (or QTCORE?)
+downloads & compiles all necessary dependencies (especially convenient
+for Windows), but you should check their requirements.
 
 * License
 Copyright (C) 2016, Alexey Cherkaev (mobius-eng)
