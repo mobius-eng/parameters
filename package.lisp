@@ -45,5 +45,9 @@
    #:parameter-ui-window
    #:parameter-demo
    #:model-show
-   #:show-model))
+   #:show-model
+   #:exec-dialog-p
+   #:make-button-in-context
+   #:model-show-object
+   #:model-show-parameter))
 
