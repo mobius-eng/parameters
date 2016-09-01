@@ -4,8 +4,9 @@
 
 ;; ** Some utils 
 (defun replace-characters (string parts replacement &key (test #'char=))
-  "Returns a new string in which all the occurences of the part
-is replaced with replacement."
+  "Returns a new string in which all the occurences of any part of the PARTS
+are replaced with REPLACEMENT. If parts occur in the string in succession,
+they will be replaced with one REPLACEMENT onyl"
   (with-output-to-string (out)
     (let ((replaced nil))
       (with-input-from-string (in (string-trim '(#\space) string))
@@ -21,7 +22,7 @@ is replaced with replacement."
            end)))))
 
 (defvar *illigal-keyword-string-characters*
-  (list #\space #\. #\, #\: #\_)
+  (list #\space #\. #\, #\: #\_ #\-)
   "The list of characters that are not permitted in the string to be 
 converted into keyword. See MAKE-KEYWORD-ID")
 
@@ -39,29 +40,29 @@ with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
   ((parent
     :initarg :parent
     :initform nil
-    :accessor parameter-base-parent
+    :accessor parameter-parent
     :documentation "Parent parameter, responsible for setting the current one")
    (constructor
     :initarg :constructor
     :initform #'identity
-    :reader parameter-base-constructor
+    :reader parameter-constructor
     :documentation
     "Function that creates an instance corresponding to a parameter")
    (id
     :initarg :id
     :type :keyword
-    :reader parameter-base-id
+    :reader parameter-id
     :documentation "Parameter ID for quick access")
    (name
     :initarg :name
     :type string
-    :reader parameter-base-name
+    :reader parameter-name
     :documentation "Parameter name")
    (description
     :initarg :description
     :initform ""
     :type string
-    :reader parameter-base-description
+    :reader parameter-description
     :documentation "Description of the parameter"))
   (:documentation "Base class for all parameters"))
 
@@ -71,9 +72,28 @@ with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
       (setf id (make-keyword-id name)))))
 
 ;; ** Generics
+;; The full set of generics that every kind of parameter must implement:
+
+;; - These are implemented automatically by inhereting from
+;;   =PARAMETER-BASE=:
+;;   - =PARAMETER-NAME= :: name of the parameter (with =SETF=)
+;;   - =PARAMETER-ID= :: id of the parameter (with =SETF=)
+;;   - =PARAMETER-DESCRIPTION= :: longer description of the parameter (with =SETF=)
+;;   - =PARAMETER-PARENT= :: parent of the parameter (with =SETF=)
+;;   - =PARAMETER-CONSTRUCTOR= :: constructor of actual value out of the
+;;        parameter (with =SETF=)
+;; - These need to be implemented specially:
+;;   - =INSTANTIATE-OBJECT= :: produces actual object out of parameter
+;;   - =PARAMETER-VALUE= :: gets the raw (uninstantiated) parameter
+;;        value. For some kind of parameters it might make sense to
+;;        create =SETF= variant of it, but not for all.
+
 (defgeneric instantiate-object (parameter)
   (:documentation
    "Instantiates object based on PARAMETER"))
+
+(defmethod instantiate-object ((parameter parameter-base))
+  (funcall (parameter-constructor parameter) (parameter-value parameter)))
 
 (defgeneric parameter-value (parameter)
   (:documentation
@@ -89,7 +109,7 @@ Not all kinds of parameter might allow for it!"))
 ;; *** Simple parameter
 ;; =VALUE-TRANSFORMER= might not be necessary but it is convenient: it
 ;; provides an extra level of decopling
-(defclass parameter (parameter-base)
+(defclass single-parameter (parameter-base)
   ((value
     :initarg :value
     :accessor parameter-value
@@ -97,30 +117,20 @@ Not all kinds of parameter might allow for it!"))
     :documentation "Value of the parameter")
    (units
     :initarg :units
-    :initform ""
-    :reader parameter-units
-    :documentation "Parameter units of measure")
-   (value-transformer
-    :initarg :value-transformer
-    :initform #'identity
-    :reader parameter-value-transformer
-    :documentation
-    "Function transforming the parameter value before setting it"))
+    :initform "-"
+    :type string
+    :reader single-parameter-units
+    :documentation "Parameter units of measure"))
   (:documentation "Single parameter representation"))
 
-(defmethod instantiate-object ((parameter parameter))
-  (with-slots (constructor value value-transformer) parameter
-    (funcall constructor (funcall value-transformer value))))
-
-
-(defmethod print-object ((object parameter) out)
+(defmethod print-object ((object single-parameter) out)
   (print-unreadable-object (object out :type t)
     (with-slots (name id value units description) object
       (format out "~A (~A) ~A ~A"
               name id value units))))
 
 ;; *** Perturbed parameter
-(defclass perturbed-parameter (parameter)
+(defclass perturbed-parameter (single-parameter)
   ((perturbation
     :initarg :perturbation
     :accessor perturbed-parameter-perturbation
@@ -131,19 +141,12 @@ Not all kinds of parameter might allow for it!"))
    "Single parameter with (randomly) perturbed value: actual value
 set when the object is instantiated is VALUE +/- RANDOM(PERTURBATION) * 100%"))
 
-;; Introduce perturbation into VALUE-TRANSFORMER
-(defmethod initialize-instance :after ((obj perturbed-parameter) &key)
-  (with-slots (value-transformer) obj
-    ;; save old value-transformer
-    (let ((straight-transformer value-transformer))
-      (setf
-       value-transformer
-       (lambda (x)
-         ;; make sure to capture OBJ: need current PERTURBATION
-         (with-slots (perturbation) obj
-           (funcall
-            straight-transformer
-            (* x (+ 1d0 (random (* 2d0 perturbation)) (- perturbation))))))))))
+(defmethod parameter-constructor ((object perturbed-parameter))
+  (let ((constructor (call-next-method))
+        (perturbation (perturbed-parameter-perturbation object)))
+    (lambda (x)
+      (funcall constructor
+               (* x (+ 1d0 (random (* 2d0 perturbation)) (- perturbation)))))))
 
 (defun perturb-parameter (parameter &optional (perturbation 0d0))
   "Perturb existing PARAMETER by creating a copy with provided PERTURBATION"
@@ -158,7 +161,7 @@ set when the object is instantiated is VALUE +/- RANDOM(PERTURBATION) * 100%"))
            :perturbation perturbation
            initargs)))
 
-;; *** Parameter-container-of-options
+;; ** Parameter-container-of-options
 (defclass parameter-options (parameter-base)
   ((options
     :initarg :options
@@ -178,7 +181,7 @@ but it will be stored in a vector!"))
 (defmethod initialize-instance :after ((object parameter-options) &key)
   (with-slots (options) object
     (mapc (lambda (option)
-            (setf (parameter-base-parent option) object))
+            (setf (parameter-parent option) object))
           options)
     (setf options (apply #'vector options))))
 
@@ -189,20 +192,14 @@ but it will be stored in a vector!"))
               name id (parameter-value object)))))
 
 (defmethod parameter-value ((parameter parameter-options))
-  "Returns current selection among options.
-NOTE: (SETF PARAMETER-VALUE) is not implemented on purpose!"
+  "Returns the value of the current selection among options"
   (with-slots (options selection) parameter
-    (aref options selection)))
+    (parameter-value (aref options selection))))
 
-(defmethod instantiate-object ((parameter parameter-options))
-  "Instantiates current selection"
-  (instantiate-object (parameter-value parameter)))
-
-;; Disable direct setting of PARAMETER-VALUE: this is a safe in this
-;; configuration as =PARAMETER-BASE= does not have =VALUE= slot.
 (defmethod (setf parameter-value) (newvalue (parameter parameter-options))
-  (error "Cannot set value directly to PARAMETER-OPTIONS:\
-          must select from the list of options"))
+  "SETF the value of the current selection"
+  (with-slots (options selection) parameter
+    (setf (parameter-value (aref options selection)) newvalue)))
 
 ;; ** Parameter-container of other parameters
 ;; =CHILDREN= are the vector of =PARAMETER= (or it subclass =PARAMETER-OPTIONS=)
@@ -215,18 +212,18 @@ NOTE: (SETF PARAMETER-VALUE) is not implemented on purpose!"
    (constructor :initform (lambda (&rest x) x)))
   (:documentation
    "Represents the group of parameters. Each parameter in CHILDREN can be
-either individual parameter, options or container itself
-(or possible other extensions). To qualify for the parameter it must implement
-INSTANTIATE-OBJECT and PARAMETER-VALUE and be a subclass of PARAMETER-BASE.
-Container's CONSTRUCTOR has a different form: it must accept a plist of the form
-(id1 instance1 id2 instance2 ...)
-Note, it is not responsible for instantiating of its children,
-only for assigning them to right slots"))
+ either individual parameter, options or container itself
+ (or possible other extensions). To qualify for the parameter it must implement
+ INSTANTIATE-OBJECT and PARAMETER-VALUE and be a subclass of PARAMETER-BASE.
+ Container's CONSTRUCTOR has a different form: it must accept a plist of the form
+ (id1 instance1 id2 instance2 ...)
+ Note, it is not responsible for instantiating of its children,
+ only for assigning them to right slots"))
 
 (defmethod initialize-instance :after ((object parameter-container) &key)
   "Sets the parent of each child"
   (with-slots (children constructor) object
-    (mapc (lambda (child) (setf (parameter-base-parent child) object))
+    (mapc (lambda (child) (setf (parameter-parent child) object))
           children)))
 
 (defmethod print-object ((object parameter-container) out)
@@ -236,99 +233,55 @@ only for assigning them to right slots"))
               name id children))))
 
 (defmethod parameter-value ((object parameter-container))
-  "Just returns itself as a value"
-  object)
+  "Returns a plist of children values"
+  (with-slots (children) object
+    (loop for child across children
+       append (list (parameter-id child) (parameter-value child)))))
 
+(defmethod (setf parameter-value) (newvalue (object parameter-container))
+  (with-slots (children) object
+    (loop for (id value) on newvalue by #'cddr
+       do (let ((child (find id children :key #'parameter-id :test #'eq)))
+            (if child
+                (setf (parameter-value child) value))))))
 
 ;; Access parameter by id
 (defmethod parameter-ref ((parameter parameter-container) id)
   "Get subparameter in parameter-container by id"
   (with-slots (children) parameter
-    (find id children :key #'parameter-base-id)))
+    (find id children :key #'parameter-id)))
 
 ;; Constructor for =PARAMETER-CONTAINER= is slightly different: it takes
 ;; the (as =&rest=) plist of the form =(id1 instance1 id2 instance2 ...)=, in contrast
 ;; to single-value parameters (where it is just a function of value only).
 (defmethod instantiate-object ((parameter parameter-container))
-  (with-slots (children constructor) parameter
+  (with-slots (children) parameter
     (let ((children-objects (mapcan
                              (lambda (p)
-                               (list (parameter-base-id p)
+                               (list (parameter-id p)
                                      (instantiate-object p)))
                              children)))
-      (apply constructor children-objects))))
-
-;; ** Helpers: to reduce verbosity
-(defun single-parameter (name value
-                  &key (id (make-keyword-id name)) (description "") (units "")
-                    (value-transformer #'identity) (constructor #'identity)
-                    parent)
-  "Creates a single parameter with a given name and value (and other args)"
-  (make-instance 'parameter
-    :name name
-    :id id
-    :value value
-    :units units
-    :description description
-    :value-transformer value-transformer
-    :constructor constructor
-    :parent parent))
-
-(defun perturbed-parameter (name value
-                            &key (id (make-keyword-id name)) (description "")
-                              (units "") (value-transformer #'identity)
-                              (constructor #'identity) (perturbation 0d0)
-                              parent)
-  "Creates a perturbed parameter with given name and value (and other args)"
-  (make-instance 'perturbed-parameter
-    :name name
-    :id id
-    :value value
-    :units units
-    :description description
-    :value-transformer value-transformer
-    :constructor constructor
-    :parent parent
-    :perturbation perturbation))
+      (apply (parameter-constructor parameter) children-objects))))
 
 
-(defun parameter-options (name options
-                          &key (id (make-keyword-id name)) (description "")
-                            (constructor #'identity) (selection 0)
-                            parent)
-  "Creates parameter options named NAME and the list of OPTIONS"
-  (make-instance 'parameter-options
-    :name name
-    :id id
-    :options options
-    :selection selection
-    :description description
-    :constructor constructor
-    :parent parent))
+;; ** Keyword-generic =PARAMETER=
 
-(defun parameter-container (name children
-                            &key (id (make-keyword-id name)) (description "")
-                              (constructor (lambda (&rest x) x)) parent)
-  "Creates a container of parameters from NAME and the list of CHILDREN"
-  (make-instance 'parameter-container
-    :name name
-    :id id
-    :children children
-    :constructor constructor
-    :description description
-    :parent parent))
+(define-keyword-generic parameter
+    (:documentation "Parameter instantiator"))
 
+(define-keyword-method parameter (:value) (&rest args)
+  (apply #'make-instance 'single-parameter args))
 
-(defun parameter (&rest args &key value perturbation options children &allow-other-keys)
-  "Construct a correct type of parameter based on options supplied"
-  (cond ((and value perturbation)
-         (apply #'make-instance 'perturbed-parameter args))
-        (value (apply #'make-instance 'parameter args))
-        (options (apply #'make-instance 'parameter-options args))
-        (children (apply #'make-instance 'parameter-container args))
-        (t (error "Inconsistent parameter list: one of\
-             VALUE PERTURBATION OPTIONS CHILDREN\
-             are required"))))
+(define-keyword-method parameter (:value :perturbation) (&rest args)
+  (apply #'make-instance 'perturbed-parameter args))
+
+(define-keyword-method parameter (:children) (&rest args)
+  (apply #'make-instance 'parameter-container args))
+
+(define-keyword-method parameter (:options) (&rest args)
+  (apply #'make-instance 'parameter-options args))
+
+;; ** Traversing (remove?)
 
 (defgeneric traverse-parameter (parameter traversing-function)
   (:documentation

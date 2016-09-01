@@ -2,7 +2,7 @@
 
 
 (defpackage :parameters
-  (:use #:cl)
+  (:use #:cl #:keyword-dispatch)
   (:export #:parameter #:instantiate-object
            #:parameter-base #:parameter-base-parent #:parameter-base-constructor
            #:parameter-base-id #:parameter-base-name
