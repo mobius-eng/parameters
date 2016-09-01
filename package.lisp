@@ -49,5 +49,8 @@
    #:exec-dialog-p
    #:make-button-in-context
    #:model-show-object
-   #:model-show-parameter))
+   #:model-show-parameter)
+  (:export
+   #:make-instantiate-button
+   #:make-load-configuration-button))
 
