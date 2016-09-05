@@ -4,19 +4,20 @@
 |#
 
 (in-package :cl-user)
-(defpackage parameters-test-asd
+(defpackage parameters-extra-test-asd
   (:use :cl :asdf))
-(in-package :parameters-test-asd)
+(in-package :parameters-extra-test-asd)
 
-(defsystem parameters-test
+(defsystem parameters-extra-test
   :author "Alexey Cherkaev"
   :license "BSD"
-  :depends-on (:parameters
+  :depends-on (:parameters-extra
                :prove)
   :components ((:module "t"
                 :components
-                ((:test-file "parameters" :depends-on ("pfr"))
-                 (:file "pfr"))))
+                ((:file "pfr")
+                 (:test-file "parameters-yaml"
+                             :depends-on ("pfr")))))
   :description "Test system for parameters"
 
   :defsystem-depends-on (:prove-asdf)

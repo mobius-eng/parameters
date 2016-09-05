@@ -1,0 +1,17 @@
+inlet flow rate:
+  value: 50.0
+  units: mol/h
+  perturbation: 0.1
+final conversion:
+  value: 80.0
+  units: "%"
+temperature:
+  type: F
+  value: 1300.0
+  units: F
+rate coefficient:
+  ref rate:
+    value: 12.0
+    units: 1/h
+  ref temperature:
+    value: 700

@@ -8,21 +8,28 @@
 |#
 
 (in-package :cl-user)
-(defpackage parameters-asd
-  (:use :cl :asdf))
-(in-package :parameters-asd)
 
-(defsystem parameters
+(defpackage parameters-extra-asd
+  (:use :cl :asdf))
+
+(in-package :parameters-extra-asd)
+
+(defsystem parameters-extra
   :version "0.1"
   :author "Alexey Cherkaev"
   :license "BSD"
-  :depends-on (#:closer-mop #:keyword-dispatch)
+  :depends-on (#:parameters
+               #:cl-arrows #:keyword-dispatch
+               #:cl-yaclyaml
+               ;; #:qtools #:qtcore #:qtgui
+               )
   :components ((:module
-                "src"
+                "extra"
                 :serial t
                 :components
                 ((:file "package")
-                 (:file "parameters"))))
+                 ;; (:file "interface")
+                 (:file "yaml"))))
   :description ""
   :long-description
   #.(with-open-file (stream (merge-pathnames
@@ -36,18 +43,4 @@
                                :fill-pointer t)))
           (setf (fill-pointer seq) (read-sequence seq stream))
           seq)))
-  :in-order-to ((test-op (test-op parameters-test))))
-
-
-;; (asdf:defsystem #:parameters
-;;   :description "Generic parameter description"
-;;   :author "Alexey Cherkaev (mobius-eng)"
-;;   :license "BSD"
-;;   :depends-on (
-;;                #:qtools #:qtcore #:qtgui)
-;;   :serial t
-;;   :components ((:file "package")
-;;                (:file "parameters")
-;;                (:file "yaml")
-;;                (:file "interface")))
-
+  :in-order-to ((test-op (test-op parameters-extra-test))))

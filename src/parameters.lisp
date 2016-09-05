@@ -22,7 +22,7 @@ they will be replaced with one REPLACEMENT onyl"
            end)))))
 
 (defvar *illigal-keyword-string-characters*
-  (list #\space #\. #\, #\: #\_ #\-)
+  (list #\space #\. #\, #\: #\_ #\- #\;)
   "The list of characters that are not permitted in the string to be 
 converted into keyword. See MAKE-KEYWORD-ID")
 
@@ -31,9 +31,11 @@ converted into keyword. See MAKE-KEYWORD-ID")
                                    *illigal-keyword-string-characters*))
   "Interns keyword from a string by replacing some illigal string characters
 with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
-  (intern (string-upcase
-           (replace-characters string illigal-characters #\-))
-          'keyword))
+  (if (symbolp string)
+      string
+      (intern (string-upcase
+               (replace-characters string illigal-characters #\-))
+              'keyword)))
 
 ;; ** Common structure
 (defclass parameter-base()
@@ -45,7 +47,7 @@ with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
    (constructor
     :initarg :constructor
     :initform #'identity
-    :reader parameter-constructor
+    :accessor parameter-constructor
     :documentation
     "Function that creates an instance corresponding to a parameter")
    (id
@@ -144,9 +146,11 @@ set when the object is instantiated is VALUE +/- RANDOM(PERTURBATION) * 100%"))
 (defmethod parameter-constructor ((object perturbed-parameter))
   (let ((constructor (call-next-method))
         (perturbation (perturbed-parameter-perturbation object)))
-    (lambda (x)
-      (funcall constructor
-               (* x (+ 1d0 (random (* 2d0 perturbation)) (- perturbation)))))))
+    (if (zerop perturbation)
+        constructor
+        (lambda (x)
+          (funcall constructor
+                   (* x (+ 1d0 (random (* 2d0 perturbation)) (- perturbation))))))))
 
 (defun perturb-parameter (parameter &optional (perturbation 0d0))
   "Perturb existing PARAMETER by creating a copy with provided PERTURBATION"
@@ -201,6 +205,12 @@ but it will be stored in a vector!"))
   (with-slots (options selection) parameter
     (setf (parameter-value (aref options selection)) newvalue)))
 
+(defmethod instantiate-object ((parameter parameter-options))
+  (with-slots (options selection) parameter
+    (let ((selected-parameter (aref options selection)))
+      (funcall (parameter-constructor parameter)
+               (instantiate-object selected-parameter)))))
+
 ;; ** Parameter-container of other parameters
 ;; =CHILDREN= are the vector of =PARAMETER= (or it subclass =PARAMETER-OPTIONS=)
 (defclass parameter-container (parameter-base)
@@ -235,7 +245,7 @@ but it will be stored in a vector!"))
 (defmethod parameter-value ((object parameter-container))
   "Returns a plist of children values"
   (with-slots (children) object
-    (loop for child across children
+    (loop for child in children
        append (list (parameter-id child) (parameter-value child)))))
 
 (defmethod (setf parameter-value) (newvalue (object parameter-container))
@@ -267,7 +277,9 @@ but it will be stored in a vector!"))
 ;; ** Keyword-generic =PARAMETER=
 
 (define-keyword-generic parameter
-    (:documentation "Parameter instantiator"))
+    (:documentation
+     "Generic parameter instantiator. Which parameter will instantiate,
+will depend on the set of keyword arguments provided"))
 
 (define-keyword-method parameter (:value) (&rest args)
   (apply #'make-instance 'single-parameter args))
@@ -282,14 +294,13 @@ but it will be stored in a vector!"))
   (apply #'make-instance 'parameter-options args))
 
 ;; ** Traversing (remove?)
-
 (defgeneric traverse-parameter (parameter traversing-function)
   (:documentation
    "Applies TRAVERSING-FUNCTION to PARAMETER. If PARAMETER is a container
 of other parameters or options and if TRAVERSING-FUNCTION returns non-NIL
 value on PARAMETER, will traverse all subparameters in depth-first order"))
 
-(defmethod traverse-parameter ((parameter parameter) traversing-function)
+(defmethod traverse-parameter ((parameter single-parameter) traversing-function)
   (funcall traversing-function parameter))
 
 (defmethod traverse-parameter ((parameter parameter-container) traversing-function)

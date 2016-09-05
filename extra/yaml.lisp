@@ -1,33 +1,6 @@
 (in-package parameters-yaml)
 
 ;; * Utils
-;; ** Convert string to keywords
-(defvar *illigal-characters*
-  (list #\space #\, #\tab #\. #\& #\_))
-
-;; TODO: unify with MAKE-KEYWORD-ID
-(defun produce-keyword (string)
-  "Produce keyword out of the string by removing `illigal'
-characters (e.g, `,', `.' ` ', etc.)"
-  (if (symbolp string)
-      string
-      (let ((string (string-upcase string)))
-        (intern
-         (let ((output-replacement t))
-           (with-output-to-string (str)
-             (loop for char across string
-                if (member char *illigal-characters* :test #'eql)
-                when output-replacement
-                do (progn
-                     (setf output-replacement nil)
-                     (princ #\- str))
-                end
-                else
-                do (progn
-                     (setf output-replacement t)
-                     (princ char str)))))
-         'keyword))))
-
 ;; ** Operations on PLISTs and nested PLISTs
 (defun filter-plist (predicate plist)
   "Apply PREDICATE to each pair (KEY VALUE) in PLIST. If
@@ -71,12 +44,14 @@ PLIST satisfying PREDICATE"
 (defmethod convert-yaml ((object hash-table) &key (keyword-ids t))
   (loop for key being the hash-keys of object using (hash-value value)
      appending (list
-                (if keyword-ids (produce-keyword key) key)
+                (if keyword-ids (make-keyword-id key) key)
                 (convert-yaml value :keyword-ids keyword-ids))))
 
 ;; ** SINGLE-FLOAT to DOUBLE-FLOAT
 ;; This is not ideal, better change how the number is read
 ;; but this change would be very deep in CL-YY package
+;; Alternatively, at the moment of reading YAML,
+;; *READ-DEFAULT-FLOAT-FORMAT* must be set to 'DOUBLE-FLOAT
 (defmethod convert-yaml ((object single-float) &key (keyword-ids t))
   (declare (ignore keyword-ids))
   (coerce object 'double-float))
@@ -102,33 +77,67 @@ PLIST satisfying PREDICATE"
 (defvar *annotations* (list :note :comment)
   "Annotations and comments in YAML file that can be omitted")
 
-(defun remove-annotations (yaml-ptree)
+(defvar *keyword-value-keys* (list :type)
+  "Keys in the YAML file values of which must be keyworded")
+
+(defun remove-annotations (yaml-ptree &optional (annotations *annotations*))
   "Removes keys :NOTE, :COMMENT, etc. For the full list
 of annotating keys see *ANNOTATIONS*"
   (filter-ptree (lambda (key value)
                   (declare (ignore value))
-                  (not (member key *annotations* :test #'eq)))
+                  (not (member key annotations :test #'eq)))
                 yaml-ptree))
 
 ;; * Unifies notation
 ;; Convenient for human input to decrease verbosity
-(defun unify-notation (configuration synonyms)
+(defun unify-notation (configuration synonyms
+                       &optional (keyword-value-keys *keyword-value-keys*))
   "Recursively substitutes values from plist SYNONYMS in place of keys in nested
 plist CONFIGURATION if their keys match. This mechanism allows CONFIGURATION have
 shorter or alternative names.
-NB. Key :TYPE is treated specially: the value is converted to symbol and then
-matched against SYNONYMS"
+If the YAML key is part of KEYWORD-VALUE-KEYS, its value is assumed to be a keyword:
+the string value is converted into the keyword and then matched against synonyms.
+By default, it contains only one key :TYPE"
   (cond ((null synonyms) configuration)
         ((symbolp configuration) (getf synonyms configuration configuration))
+        ((stringp configuration) configuration)
+        ((vectorp configuration)
+         (map 'vector
+              (lambda (item)
+                (unify-notation item synonyms keyword-value-keys))
+              configuration))
         ((not (consp configuration)) configuration)
         (t (loop for (key value) on configuration by #'cddr
-              if (eq key :type)
-              append (list :type
-                           (unify-notation (produce-keyword value) synonyms))
+              if (find key keyword-value-keys :test #'eq)
+              append (list (getf synonyms key key)
+                           (unify-notation (make-keyword-id value) synonyms))
               else
               append (list (getf synonyms key key)
                            (unify-notation value synonyms))
               end))))
+
+(defun load-configuration (filename &key synonyms (keyword-value-keys *keyword-value-keys*))
+  "Load configuration from FILENAME.
+Use SYNONYMS to unify key names.
+Use KEYWORD-VALUE-KEYS to convert the value of these keys to keywords"
+  (let ((*read-default-float-format* 'double-float))
+    (let ((yaml-raw (cl-yy:yaml-load-file filename)))
+      (-> yaml-raw
+          (convert-yaml)
+          (remove-annotations)
+          (unify-notation synonyms keyword-value-keys)))))
+
+(defun load-parameter-configuration (parameter filename
+                                     &key synonyms (keyword-value-keys
+                                                    *keyword-value-keys*))
+  "Load configuration from YAML FILENAME to PARAMETER.
+Use SYNONYMS to unify key names.
+Use KEYWORD-VALUE-KEYS to convert the value of these keys to keywords"
+  (let ((configuration (load-configuration
+                        filename
+                        :synonyms synonyms
+                        :keyword-value-keys keyword-value-keys)))
+    (update-parameter-from-config parameter configuration)))
 
 ;; * Load configuration into parameter
 (defgeneric update-parameter-from-config(parameter configuration)
@@ -136,13 +145,25 @@ matched against SYNONYMS"
    "Updates existing PARAMETER object (e.g. PARAMETER, PARAMETER-CONTAINER or
 PARAMETER-OPTIONS) with CONFIGURATION (nested plist)
 For options CONFIGURATION only describes the selected option. The selection is
-deduced based on :TYPE key"))
+deduced based on :TYPE key which specifies selected PARAMETER-ID"))
 
-(defmethod update-parameter-from-config ((parameter parameter) configuration)
+(defmethod update-parameter-from-config ((parameter single-parameter) configuration)
   "Single parameter: only updates the value. The rest is ignored"
   (when configuration
-    (setf (parameter-value parameter) configuration)))
+    (setf (parameter-value parameter) (getf configuration :value))))
 
+(defmethod update-parameter-from-config ((parameter perturbed-parameter) configuration)
+  "Perturbed parameter: updates value and perturbation"
+  (when configuration
+    (let ((newvalue (getf configuration :value))
+          (newperturbation (getf configuration :perturbation)))
+      (when newvalue
+        (setf (parameter-value parameter) newvalue))
+      (when newperturbation
+        (setf (perturbed-parameter-perturbation parameter)
+              newperturbation))
+      (unless (or newvalue newperturbation)
+        (warn "Parameter ~A: no value or perturbation found" (parameter-id parameter))))))
 
 (defmethod update-parameter-from-config ((parameter parameter-container) configuration)
   "Container: updates each subparameter (if present in CONFIGURATION)"
@@ -150,19 +171,19 @@ deduced based on :TYPE key"))
     (loop for subparameter in (parameter-container-children parameter)
        do (update-parameter-from-config
            subparameter
-           (getf configuration (parameter-base-id subparameter))))))
+           (getf configuration (parameter-id subparameter))))))
 
 (defmethod update-parameter-from-config ((parameter parameter-options) configuration)
   "Options: only updates selected option. Resets the selection according to specified
 type ('type' id in YAML)"
   (when configuration
-    (let ((type (produce-keyword (getf configuration :type))))
+    (let ((type (make-keyword-id (getf configuration :type))))
       (format t "~&OPTIONS: TYPE ~A~%" type)
       (loop for option across (parameter-options-options parameter)
          for index from 0
-         when (eq (parameter-base-id option) type)
+         when (eq (parameter-id option) type)
          do (progn
-              (format t "~&Found type ~A (~A)" type (parameter-base-id option))
+              (format t "~&Found type ~A (~A)" type (parameter-id option))
               (setf (parameter-options-selection parameter) index)
               (update-parameter-from-config option configuration)
               (return-from update-parameter-from-config))
