@@ -1,10 +1,11 @@
-% Created 2016-08-23 Tue 15:27
+% Created 2016-09-05 Mon 12:40
 \documentclass[listings, a4paper, fleqn, pdftex, 12pt, openany, oneside, final]{memoir}
 \makeatletter
 \usepackage[english]{babel}
 \usepackage[T1]{fontenc}
 \usepackage{amsmath}
 \usepackage{amsthm}
+\usepackage{mathtools}
 \usepackage{latexsym}
 \usepackage{amssymb}
 \usepackage{amsfonts}
@@ -67,10 +68,11 @@
 %%% Common Lisp shortcut for minted
 \newminted{cl}{}
 \makeatother
+\author{alexey}
 \date{\today}
 \title{}
 \hypersetup{
- pdfauthor={},
+ pdfauthor={alexey},
  pdftitle={},
  pdfkeywords={},
  pdfsubject={},
@@ -81,31 +83,56 @@
 \tableofcontents
 
 \chapter{Parameter container: complete example}
-\label{sec:orgheadline9}
+\label{sec:orgheadline7}
 \section{Model}
 \label{sec:orgheadline6}
 \subsection{Description}
 \label{sec:orgheadline1}
-This model is based on plug-flow reactor example (Levenspiel, 1999;
-page 106). Plug flow reactor is proposed for the decomposition of
+This model is based on plug-flow reactor (PFR) example (Levenspiel,
+1999; page 106). PFR can be viualised as a tube whith input steam
+flowing into one side and output streams coming from another
+side. Inside the tube some conversion occurs that alters the
+composition of the input stream. The typical characteristic of a
+(ideal) PFR are:
+\begin{itemize}
+\item Conversion is gradual and
+\item There is no back-mixing of the flowing stream.
+\end{itemize}
+
+These characteristics make it easy to write mass-balance of PFR find
+the extent of conversion of the input stream. Conversion is defined as
+one minus the ratio of what is coming out over what came in, or more
+formally, conversion of the species \(A\) is
+
+\begin{equation}
+\label{eq:1}
+X_{A} = \left(1 - \frac{F_{A,out}}{F_{A,in}} \right)\times 100\%
+\end{equation}
+where \(F_{A}\) is molar (or mass) flow rate (in, for example, mol/h). For
+bravity, we will not be deriing any mass balance equations for PFR,
+but only use a couple of results from Levenspiel, 1999.
+
+PFR is proposed for the decomposition of
 phosphine
 \begin{equation*}
 4\mathrm{PH}_{3g }\to \mathrm{P}_{4(g)} + 6\mathrm{H}_{2}
 \end{equation*}
 Denote \(A = \mathrm{PH}_{3}\), \(B = \mathrm{P}_{4}\) and \(S =
-\mathrm{H}_{2}\). Reaction rate is defined using Arrhenius law
+\mathrm{H}_{2}\). Reaction rate (i.e. the rate at which \(A\) disappears) is
+defined using equation:
 \begin{equation}
 -r_{A}=kC_{A}
 \end{equation}
-with
+with rate constant \(k\) being dependent on temperature according to
+\emph{Arrhenius law}:
 \begin{equation}
 k=k_{0} e^{-E/R(1/T-1/T_{0})}
 \end{equation}
 
-The volume of the reactor required to achieve the conversion \(X_{A}\) (mol
-of A after reactor / mol of A before) is defined by the equation
-(Levenspiel, 1999; equation 21):
+The volume of the reactor required to achieve the conversion \(X_{A}\) is
+defined by the equation (Levenspiel, 1999; equation 21):
 \begin{equation}
+\label{eq:pfr-vol}
 V=\frac{F_{A0}}{kC_{A0}}\left[(1+\varepsilon_{A})\ln{\frac{1}{1-X_{A}}} -\varepsilon_{A}X_{A}\right]
 \end{equation}
 where \(F_{A0}\) is input flow rate of A and \(C_{A0}\) is initial concentration
@@ -137,9 +164,12 @@ Parameter & Default value & Units\\
 \end{tabular}
 \end{center}
 
+
+Our goal is to develop computer representation of this model.
+
 \subsection{Reaction rate representation}
 \label{sec:orgheadline2}
-First need to represent the temperature dependence of the rate
+First, we need to represent the temperature dependence of the rate
 constant
 
 \begin{minted}[]{common-lisp}
@@ -182,7 +212,7 @@ constant
 
 \subsection{Ideal gas law}
 \label{sec:orgheadline3}
-To find the concentration from given pressure.
+To find the concentration from given pressure and temperature:
 
 \begin{minted}[]{common-lisp}
 (defun ideal-gas-concentration (pressure temperature)
@@ -220,11 +250,11 @@ Plug flow reactor model is composed of the following parts:
     :initarg :operating-pressure
     :accessor operating-pressure
     :documentation "PFR operating pressure (Pa)")
-   (phosphine-decomposition-rate-constant
-    :initarg :rate-constant
-    :accessor phosphine-decomposition-rate-constant
+   (phosphine-decomposition-rate-coefficient
+    :initarg :rate-coefficient
+    :accessor phosphine-decomposition-rate-coefficient
     :documentation
-    "Rate constant object specializing RATE-CONSTANT generic function"))
+    "Rate constant 'k' object specializing RATE-CONSTANT generic function"))
   (:documentation
    "Plug-flow-reactor for phosphine decomposition
     4PH3 -> P4 + 6H2"))
@@ -234,22 +264,31 @@ Plug flow reactor model is composed of the following parts:
                (x final-conversion)
                (temperature operating-temperature)
                (p operating-pressure)
-               (rate-expression phosphine-decomposition-rate-constant))
+               (rate-expression phosphine-decomposition-rate-coefficient))
       object
     (print-unreadable-object (object out :type t)
       (format out "~@<~:_F = ~A mol/s ~:_X = ~A ~:_T = ~A K ~:_p = ~A Pa~:>"
               f x temperature p))))
 \end{minted}
 
-Calculate volume of the reactor:
+Use equation \eqref{eq:pfg-vol} to calculate volume of the reactor:
 
 \begin{minted}[]{common-lisp}
 (defmethod PFR-phosphine-volume ((model pfr-phosphine))
+  "Uses equation (Levenspiel, 1999; equation 21):
+     F   _                          _  
+      A0|               1            | 
+V = ----| (1 + e )ln{------}  - e X  | 
+    kC  |       A    1 - X       A A | 
+      A0|_                A         _| 
+
+to calculate the volume of the plug-flow reactor
+"
   (with-accessors ((f inlet-flow-rate)
                    (x final-conversion)
                    (temperature operating-temperature)
                    (p operating-pressure)
-                   (rate phosphine-decomposition-rate-constant))
+                   (rate phosphine-decomposition-rate-coefficient))
       model
     (let ((k (rate-constant rate temperature))
           (eps 0.75d0)
@@ -261,7 +300,87 @@ Calculate volume of the reactor:
 
 \subsection{Model parameters}
 \label{sec:orgheadline5}
-The model consists of a large number of parameters. Arrhenius law
+The model consists of a large number of parameters. To complicate the
+matter further, some parameters can be represented in different units
+of measure. Just to keep the description short, the only different
+units parameter we will consider is temperature. To assist in defining
+the temperature in different units (Celcius, Kelvin or Fahrenheit) we
+will use the following function:
+
+\begin{minted}[]{common-lisp}
+(defun make-temperature (default-value default-units name id)
+  "Produces PARAMETER-OPTIONS parameter for temperature, represented
+in different units: Celsius, Kelvin and Fahrenheit. Arguments:
+
+DEFAULT-VALUE : default numerical value to be used
+DEFAULT-UNITS : a keyword (:C, :K or :F) denoting default units
+NAME          : a string name of the resulting PARAMETER-OPTIONS
+ID            : a symbolic ID of the resulting PARAMETER-OPTIONS"
+  (let* ((units (reverse
+                 (remove-duplicates
+                  (reverse (cons default-units '(:C :K :F))))))
+         (values-units (mapcar
+                        (lambda (to-units)
+                          (list
+                           to-units
+                           (convert-temperature default-units
+                                                to-units
+                                                default-value)))
+                        units)))
+    (parameter
+     :name name
+     :id id
+     :options
+     (loop for (units value) in values-units
+        collect (let ((units units))
+                  (parameter
+                   :name (format nil "Temperature in ~A" units)
+                   :id units
+                   :value value
+                   :units (format nil "~A" units)
+                   :constructor (lambda (x) (convert-temperature units :K x))))))))
+\end{minted}
+
+
+This function produces a value of type \texttt{PARAMETER-OPTIONS} to specify
+the temperature in convenient units. It makes sure that the provided
+\texttt{DEFAULT-UNITS} will be the default choice for units. It uses
+\texttt{CONVERT-TEMPERATURE} to provide the conversions between different
+units:
+
+\begin{minted}[]{common-lisp}
+(defmethod convert-temperature ((from (eql :C)) (to (eql :C)) value)
+  "Converts temperature VALUE from units FROM to units TO"
+  value)
+
+(defmethod convert-temperature ((from (eql :F)) (to (eql :F)) value)
+  value)
+
+(defmethod convert-temperature ((from (eql :K)) (to (eql :K)) value)
+  value)
+
+(defmethod convert-temperature ((from (eql :F)) (to (eql :C)) value)
+  (* 5/9 (- value 32d0)))
+
+(defmethod convert-temperature ((from (eql :C)) (to (eql :F)) value)
+  (+ 32d0 (* 9/5 value)))
+
+(defmethod convert-temperature ((from (eql :C)) (to (eql :K)) value)
+  (+ value 273.15d0))
+
+(defmethod convert-temperature ((from (eql :K)) (to (eql :C)) value)
+  (- value 273.15d0))
+
+(defmethod convert-temperature ((from (eql :F)) (to (eql :K)) value)
+  (convert-temperature :C :K (convert-temperature :F :C value)))
+
+(defmethod convert-temperature ((from (eql :K)) (to (eql :F)) value)
+  (convert-temperature :C :F (convert-temperature :K :C value)))
+\end{minted}
+
+
+
+Arrhenius law
 parameters are grouped together to form \texttt{ARRHENIUS-LAW} object and the
 rest: to form \texttt{PFR-PHOSPHINE}.
 
@@ -271,7 +390,7 @@ Firts, Arrhenius law parameters:
 (defun make-phosphine-default-arrhenius-law ()
   (parameter
    :name "Arrhenius law for phosphine decomposition"
-   :id :rate-constant
+   :id :rate-coefficient
    :children
    (list
     (parameter
@@ -279,19 +398,14 @@ Firts, Arrhenius law parameters:
      :id :reference-rate-constant
      :value 10d0
      :units "1/h"
-     :value-transformer (lambda (x) (/ x 3600d0)))
+     :constructor (lambda (x) (/ x 3600d0)))
     (parameter
      :name "Activation energy, Ea"
      :id :activation-energy
      :value 160d0
      :units "kJ/mol"
-     :value-transformer (lambda (x) (* x 1000d0)))
-    (parameter
-     :name "Reference temperature, T0"
-     :id :reference-temperature
-     :value 650d0
-     :units "C"
-     :value-transformer (lambda (x) (+ x 273.15d0))))
+     :constructor (lambda (x) (* x 1000d0)))
+    (make-temperature 649d0 :C "Reference temperature, T0" :reference-temperature))
    :constructor (lambda (&rest args)
                   (apply #'make-instance 'arrhenius-law args))))
 \end{minted}
@@ -309,99 +423,27 @@ in either Celcius or Fahrenheit.
     (parameter
      :name "Inlet flow rate"
      :value 40d0
+     :perturbation 0.2d0
      :units "mol/h"
-     :value-transformer (lambda (x) (/ x 3600d0)))
+     :constructor (lambda (x) (/ x 3600d0)))
     (parameter
      :name "Final conversion"
      :value 80d0
      :units "%"
-     :value-transformer (lambda (x) (/ x 100d0)))
-    (parameter
-     :name "Operating temperature"
-     :options
-     (list
-      (parameter
-       :name "Operating temperature (C)"
-       :value 650d0
-       :units "C"
-       :value-transformer (lambda (x) (+ x 273.15d0)))
-      (parameter
-       :name "Operating temperature (F)"
-       :value 1202d0
-       :units "F"
-       :value-transformer (lambda (x) (+ 273.15d0 (* 5/9 (- x 32d0)))))))
+     :constructor (lambda (x) (/ x 100d0)))
+    (make-temperature 1200.2d0 :F "Operating temperature" :operating-temperature)
     (parameter
      :name "Operating pressure"
-     :value 4.54d0
+     :value 4.55d0
      :units "atm"
-     :value-transformer (lambda (x) (* x 1.01d5)))
+     :constructor (lambda (x) (* x 1.01d5)))
     (make-phosphine-default-arrhenius-law))
    :constructor (lambda (&rest args)
                   (apply #'make-instance 'PFR-phosphine args))))
+
+(defvar *PFR-synonyms*
+  '(:temperature :operating-temperature
+    :ref-rate :reference-rate-constant
+    :ref-temperature :reference-temperature))
 \end{minted}
-
-\section{Tests}
-\label{sec:orgheadline7}
-Use FiveAM. Put all the tests into their own suite.
-\begin{minted}[]{common-lisp}
-(def-suite pfr-phosphine-suite)
-
-(in-suite pfr-phosphine-suite)
-\end{minted}
-
-Make sure \texttt{PARAMETER-VALUE} on \texttt{PARAMETER-CONTAINER} returns itself.
-\begin{minted}[]{common-lisp}
-(test test-parameter-container-value
-  (let ((arrhenius-law (make-phosphine-default-arrhenius-law)))
-    (is (eq (parameter-value arrhenius-law)
-            arrhenius-law))))
-\end{minted}
-
-Instantiated object is of the right type
-\begin{minted}[]{common-lisp}
-(test test-parameter-container-instantiate-object
-  (let ((arrhenius-law (make-phosphine-default-arrhenius-law)))
-    (let ((result (instantiate-object arrhenius-law)))
-      (is (typep result 'arrhenius-law)))))
-\end{minted}
-
-Container must instantiate objects recursively and the parameters
-must be properly adjusted
-\begin{minted}[]{common-lisp}
-(test test-composite-parameter-container-instantiate-object
-  (let ((pfr (make-default-pfr-phosphine)))
-    ;; Checks if it propogates and converts
-    (setf (parameter-value (parameter-ref pfr :inlet-flow-rate))
-          50d0)
-    (let ((result (instantiate-object pfr)))
-      (is (typep result 'PFR-phosphine))
-      (is (typep (phosphine-decomposition-rate-constant
-                  result)
-                 'arrhenius-law))
-      (is (approx= (inlet-flow-rate result) (/ 50d0 3600d0))))))
-\end{minted}
-
-Finally, this test combines the test on parameters and the model:
-compare the result with the result from Levenspiel, 1999; Example 5.5:
-\begin{minted}[]{common-lisp}
-(test test-pfr-volume "Compare result with Levenspiel's example"
-  (let* ((pfr-parameters (make-default-pfr-phosphine))
-         (pfr-model (instantiate-object pfr-parameters))
-         (volume (pfr-phosphine-volume pfr-model))
-         (levenspiel-result 0.148d0))
-    (is (approx= levenspiel-result volume :abstol 1d-3 :reltol 1d-3))))
-\end{minted}
-
-To run the tests:
-\begin{quote}
-(let ((\textbf{debug-on-error} t))
-  (run! 'pfr-phosphine-suite))
-\end{quote}
-
-\section{To run the interface}
-\label{sec:orgheadline8}
-To run the interface part, execute the following:
-\begin{quote}
-(parameters-interface:show-model (make-default-pfr-phosphine))
-\end{quote}
 \end{document}

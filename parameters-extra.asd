@@ -30,7 +30,7 @@
                 ((:file "package")
                  ;; (:file "interface")
                  (:file "yaml"))))
-  :description ""
+  :description "Extra functionality to PARAMETERS: YAML configuration"
   :long-description
   #.(with-open-file (stream (merge-pathnames
                              #p"README.org"

@@ -13,7 +13,7 @@
 (in-package :parameters-asd)
 
 (defsystem parameters
-  :version "0.1"
+  :version "0.2"
   :author "Alexey Cherkaev"
   :license "BSD"
   :depends-on (#:closer-mop #:keyword-dispatch)
@@ -23,7 +23,7 @@
                 :components
                 ((:file "package")
                  (:file "parameters"))))
-  :description ""
+  :description "Input parameters library for complex models"
   :long-description
   #.(with-open-file (stream (merge-pathnames
                              #p"README.org"

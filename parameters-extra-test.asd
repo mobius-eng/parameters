@@ -18,7 +18,7 @@
                 ((:file "pfr")
                  (:test-file "parameters-yaml"
                              :depends-on ("pfr")))))
-  :description "Test system for parameters"
+  :description "Test system for parameters-extra"
 
   :defsystem-depends-on (:prove-asdf)
   :perform (test-op :after (op c)

@@ -43,7 +43,7 @@ possible. The code is thoroughly documented if anyone wants to extend
 it. Some formalization still needs to be done (e.g. what is the
 minimum implementation requirements are for something to be a 'parameter).
 
-* YAML configurations
+* Extra: YAML configurations
 
 To simplify the input it is possible to specify model parameters in
 YAML file. The workflow consists of two steps:
@@ -58,7 +58,12 @@ YAML. Other capabilities and limitations:
 - YAML must contain ASCII-characters only: the limitation comes from
   the use of CL-YACLYAML library (needs improvement).
 
-* Interface
+* Extra: Interface
+
+Note: this functionality depends on =qtools= and =qt-libs=. Right now
+=qt-libs= is going through the update process and does not work as
+expected. Thus, this functionality is considered *not implemented* and
+will be updated as soon as =qt-libs= is stabilised.
 
 Once the default configuration of the model is set, it is possible to
 set up the interface (using Qt) using =SHOW-MODEL= function of
@@ -71,14 +76,29 @@ set up the interface (using Qt) using =SHOW-MODEL= function of
 * Tutorial
 See directory =documentation= for the tutorial on how to use
 =PARAMETERS= on an example problem. Actual source code for the
-tutorial is a part of the tests (=tests/parameters-tests.lisp=).
+tutorial is a part of the tests (=t/parameters-tests.lisp=).
+
+* Changelog
+The following was changed:
+- General cleanup was performed. =PARAMETER-VALUE-TRANSFORMER=
+  function was removed as duplicating
+  =PARAMETER-BASE-CONSTRUCTOR=. Also, =-BASE-= infix was dropped in
+  some functions.
+- The full set of Parameters API was defined.
+- Function =PARAMETER= was made "keyword-generic".
+- Tests were migrated from FiveAM to Prove.
+- Tests were improved to cover more functionality.
+- YAML tests were added.
+- Documentation updated.
+- Interface functionality put on hold until =qt-libs= situation is
+  resolved.
 
 * Future improvements
 
 The following needs improvements:
-- Complete set of tests: YAML
 - Improve YAML support: UTF-8 encoding and configuration save.
 - Improve interface: dialog placement, object view.
+- Add web-interface using Lucerne or Caveman2.
 - Manual and tutorials: add more.
 
 * Installation
@@ -92,10 +112,6 @@ your =local-projects= folder of Quicklisp, start lisp and do
 Was tested on: Windows x86-64 (SBCL), Linux x86-64 (SBCL & CCL), Linux
 ARM (Raspberry Pi 3, SBCL).
 
-PARAMETERS relly on QTOOLS library to construct the
-interface. Generally, QTOOLS (or QTCORE?)
-downloads & compiles all necessary dependencies (especially convenient
-for Windows), but you should check their requirements.
 
 * License
 Copyright (C) 2016, Alexey Cherkaev (mobius-eng)

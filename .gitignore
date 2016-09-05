@@ -6,3 +6,8 @@
 *.x86f
 *~
 .#*
+*.aux
+*.log
+*.out
+*.toc
+documentation/_minted-pfr/*
