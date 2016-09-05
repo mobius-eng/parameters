@@ -21,15 +21,14 @@
   :depends-on (#:parameters
                #:cl-arrows #:keyword-dispatch
                #:cl-yaclyaml
-               ;; #:qtools #:qtcore #:qtgui
-               )
+               #:qtools #:qtcore #:qtgui)
   :components ((:module
                 "extra"
                 :serial t
                 :components
                 ((:file "package")
-                 ;; (:file "interface")
-                 (:file "yaml"))))
+                 (:file "yaml")
+                 (:file "interface"))))
   :description "Extra functionality to PARAMETERS: YAML configuration"
   :long-description
   #.(with-open-file (stream (merge-pathnames

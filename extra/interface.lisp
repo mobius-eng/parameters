@@ -41,11 +41,11 @@ OBJECT occupies"))
 ;; INITIALIZE-INSTANCE method
 (defmethod initialize-instance :after ((instance parameter-ui) &key)
   (with-slots (name entry units parameter) instance
-    (setf (q+:text name) (parameter-base-name parameter))
+    (setf (q+:text name) (parameter-name parameter))
     (setf (q+:text entry) (format nil "~A" (parameter-value parameter)))
     (setf (q+:alignment entry) (q+:qt.align-right))
-    (setf (q+:tool-tip entry) (parameter-base-description parameter))
-    (setf (q+:text units) (parameter-units parameter))))
+    (setf (q+:tool-tip entry) (parameter-description parameter))
+    (setf (q+:text units) (single-parameter-units parameter))))
 
 ;;  ** Parameter changed signal
 ;; This signal is used to propogate up in hierarchy of parameters:
@@ -66,7 +66,7 @@ OBJECT occupies"))
 
 ;; ** Generic functions
 ;; Factory method
-(defmethod make-ui ((object parameter))
+(defmethod make-ui ((object single-parameter))
   (make-instance 'parameter-ui :parameter object))
 
 ;; Add to an existing grid (for proper alignment)
@@ -214,14 +214,14 @@ Works with any kind of PARAMETER"
     (loop for parameter across (parameter-options-options parameter-options)
        for index from 0
        do (let ((parameter-ui (make-ui parameter))
-                (switch (q+:make-qradiobutton (parameter-base-name parameter)))
+                (switch (q+:make-qradiobutton (parameter-name parameter)))
                 (dialog (q+:make-qdialog ))
                 (dialog-layout (q+:make-qgridlayout)))
             ;; Setup dialog:
             ;; non-modal
             (q+:set-modal dialog nil)
             ;; Title
-            (q+:set-window-title dialog (parameter-base-name parameter))
+            (q+:set-window-title dialog (parameter-name parameter))
             ;; add parameters to dialog layout
             (add-to-grid parameter-ui dialog-layout 0 0)
             ;; add layout to dialog
@@ -440,10 +440,9 @@ This form is suitable to be used as an entry in the list for
            (when (exec-dialog-p file-dialog)
              (let ((*read-default-float-format* 'double-float))
                (let* ((yaml-file (first (q+:selected-files file-dialog)))
-                      (configuration (-> (yaml-load-file yaml-file)
-                                         (convert-yaml)
-                                         (remove-annotations)
-                                         (unify-notation synonyms))))
+                      (configuration (load-configuration
+                                      yaml-file
+                                      :synonyms synonyms)))
                  (update-parameter-from-config parameter configuration)))
              (update-parameter-view parameter-widget)
              (update-parameter-view parameter-view))))))))
