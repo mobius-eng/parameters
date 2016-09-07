@@ -21,8 +21,7 @@
                 "src"
                 :serial t
                 :components
-                ((:file "package")
-                 (:file "parameters"))))
+                ((:file "parameters"))))
   :description "Input parameters library for complex models"
   :long-description
   #.(with-open-file (stream (merge-pathnames
@@ -37,17 +36,3 @@
           (setf (fill-pointer seq) (read-sequence seq stream))
           seq)))
   :in-order-to ((test-op (test-op parameters-test))))
-
-
-;; (asdf:defsystem #:parameters
-;;   :description "Generic parameter description"
-;;   :author "Alexey Cherkaev (mobius-eng)"
-;;   :license "BSD"
-;;   :depends-on (
-;;                #:qtools #:qtcore #:qtgui)
-;;   :serial t
-;;   :components ((:file "package")
-;;                (:file "parameters")
-;;                (:file "yaml")
-;;                (:file "interface")))
-

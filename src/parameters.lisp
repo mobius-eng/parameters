@@ -1,4 +1,25 @@
-(in-package parameters)
+(in-package :cl-user)
+
+(defpackage parameters
+  (:use #:cl #:keyword-dispatch)
+  (:export #:make-keyword-id
+           #:parameter #:instantiate-object
+           #:parameter-base #:parameter-parent #:parameter-constructor
+           #:parameter-id #:parameter-name
+           #:parameter-description
+           #:parameter-value
+           #:single-parameter-units
+           #:perturbed-parameter #:perturbed-parameter-perturbation
+           #:perturb-parameter!
+           #:parameter-options #:parameter-options-options
+           #:parameter-options-selection
+           #:parameter-container #:parameter-container-children
+           #:parameter-broadcast
+           #:parameter-ref
+           #:single-parameter
+           #:traverse-parameter))
+
+(in-package :parameters)
 
 ;; * Parameters setting framework
 
@@ -37,6 +58,14 @@ with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
                (replace-characters string illigal-characters #\-))
               'keyword)))
 
+;; ** Keyword-generic =PARAMETER=
+
+(define-keyword-generic parameter
+    (:documentation
+     "Generic parameter instantiator. Which parameter will instantiate,
+will depend on the set of keyword arguments provided"))
+
+
 ;; ** Common structure
 (defclass parameter-base()
   ((parent
@@ -53,18 +82,18 @@ with '-'. See *ILLIGAL-KEYWORD-STRING-CHARACTERS* for the list of characters"
    (id
     :initarg :id
     :type :keyword
-    :reader parameter-id
+    :accessor parameter-id
     :documentation "Parameter ID for quick access")
    (name
     :initarg :name
     :type string
-    :reader parameter-name
+    :accessor parameter-name
     :documentation "Parameter name")
    (description
     :initarg :description
     :initform ""
     :type string
-    :reader parameter-description
+    :accessor parameter-description
     :documentation "Description of the parameter"))
   (:documentation "Base class for all parameters"))
 
@@ -143,27 +172,54 @@ Not all kinds of parameter might allow for it!"))
    "Single parameter with (randomly) perturbed value: actual value
 set when the object is instantiated is VALUE +/- RANDOM(PERTURBATION) * 100%"))
 
-(defmethod parameter-constructor ((object perturbed-parameter))
-  (let ((constructor (call-next-method))
-        (perturbation (perturbed-parameter-perturbation object)))
-    (if (zerop perturbation)
-        constructor
-        (lambda (x)
-          (funcall constructor
-                   (* x (+ 1d0 (random (* 2d0 perturbation)) (- perturbation))))))))
+(defun make-perturbed-constructor (object constructor)
+  #'(lambda (x)
+      (with-slots ((p perturbation)) object
+        (if (= p 0d0)
+            (funcall constructor x)
+            (funcall constructor
+                     (* x (+ 1d0 (random (* 2d0 p)) (- p))))))))
 
-(defun perturb-parameter (parameter &optional (perturbation 0d0))
-  "Perturb existing PARAMETER by creating a copy with provided PERTURBATION"
-  (let* ((slots (closer-mop:class-slots (class-of parameter)))
-         (initargs
-          (loop for slot in slots
-             append (list
-                     (first (closer-mop:slot-definition-initargs slot))
-                     (slot-value parameter
-                                 (closer-mop:slot-definition-name slot))))))
-    (apply #'make-instance 'perturbed-parameter
-           :perturbation perturbation
-           initargs)))
+(defmethod initialize-instance :after ((object perturbed-parameter) &key)
+  (let ((constructor (slot-value object 'constructor)))
+    (setf (slot-value object 'constructor)
+          (make-perturbed-constructor object constructor))))
+
+(defmethod parameter-constructor ((object perturbed-parameter))
+  (call-next-method))
+
+(defmethod (setf parameter-constructor) (newvalue (object perturbed-parameter))
+  (setf (slot-value object 'constructor)
+        (make-perturbed-constructor object newvalue)))
+
+;; (defmethod parameter-constructor ((object perturbed-parameter))
+;;   (break)
+;;   (let ((constructor (call-next-method))
+;;         (perturbation (perturbed-parameter-perturbation object)))
+;;     (if (zerop perturbation)
+;;         constructor
+;;         (lambda (x)
+;;           (funcall constructor
+;;                    (* x (+ 1d0 (random (* 2d0 perturbation)) (- perturbation))))))))
+
+(defmethod update-instance-for-different-class :before ((previous single-parameter)
+                                                        (current perturbed-parameter)
+                                                        &rest initargs)
+  (declare (ignore initargs))
+  (let ((constructor (slot-value previous 'constructor)))
+    (setf (slot-value current 'constructor)
+          (make-perturbed-constructor current constructor))))
+
+(defgeneric perturb-parameter! (parameter perturbation)
+  (:documentation
+   "Destructively perturb parameter with given perturbation level."))
+
+(defmethod perturb-parameter! ((parameter single-parameter) (perturbation double-float))
+  "Destructively change PARAMETER to become perturbed with PERTURBATION"
+  (change-class parameter 'perturbed-parameter :perturbation perturbation))
+
+(defmethod perturb-parameter! ((parameter perturbed-parameter) (perturbation double-float))
+  (setf (perturbed-parameter-perturbation parameter) perturbation))
 
 ;; ** Parameter-container-of-options
 (defclass parameter-options (parameter-base)
@@ -210,6 +266,12 @@ but it will be stored in a vector!"))
     (let ((selected-parameter (aref options selection)))
       (funcall (parameter-constructor parameter)
                (instantiate-object selected-parameter)))))
+
+(defmethod perturb-parameter! ((parameter parameter-options) (perturbation list))
+  "Perturb options of the PARAMETER according to PERTURBATION"
+  (with-slots (options) parameter
+    (perturb-parameter! (aref options selection) perturbation)
+    parameter))
 
 ;; ** Parameter-container of other parameters
 ;; =CHILDREN= are the vector of =PARAMETER= (or it subclass =PARAMETER-OPTIONS=)
@@ -273,25 +335,74 @@ but it will be stored in a vector!"))
                              children)))
       (apply (parameter-constructor parameter) children-objects))))
 
+(defmethod perturb-parameter! ((parameter parameter-container) &optional (perturbation 0d0))
+  "Perturb all children"
+  (with-slots (children) parameter
+    (dolist (child children parameter)
+      (perturb-parameter! child perturbation))))
 
-;; ** Keyword-generic =PARAMETER=
 
-(define-keyword-generic parameter
-    (:documentation
-     "Generic parameter instantiator. Which parameter will instantiate,
-will depend on the set of keyword arguments provided"))
+;; ** Parameter broadcast
+(defclass parameter-broadcast (parameter-container)
+  ()
+  (:documentation
+   "Broadcasts parameter at the time of instantiation. Each child is
+broadcasted to the list of instances. Each instance is instantiated using
+INSTANTIATE-OBJECT. This is useful when used with PERTURBED-PARAMETER
+Extra arguments for MAKE-INSTANCE:
+  :NUMBER-OF-INSTANCES - number of instances of each sub-parameter
+  :NUMBER-NAME - text used to identify the number of instances
+  :NUMBER-DESCRIPTION - description of number instances"))
 
+(defmethod initialize-instance :around
+    ((object parameter-broadcast) &rest args
+     &key
+       children number-of-instances
+       (number-name "Number of instances")
+       (number-description
+        "Number of broadcasted instances to create")
+       &allow-other-keys)
+  (let* ((p (parameter :name number-name
+                       :id :instances-number
+                       :value number-of-instances
+                       :description number-description)))
+    (setf (getf args :children) (cons p children))
+    (apply #'call-next-method object args)))
+
+(defmethod instantiate-object ((parameter parameter-broadcast))
+  "Instantiates every child NUMBER-OF-INSTANCES number of times"
+  (with-slots (children) parameter
+    (let ((number-of-instances (instantiate-object (first children)))
+          (children (rest children)))
+      (let ((children-instances
+             (loop for child in children
+                append (list (parameter-id child)
+                             (loop repeat number-of-instances
+                                collect (instantiate-object child))))))
+        (apply (parameter-constructor parameter)
+               children-instances)))))
+
+;; ** Methods of =PARAMETER=
 (define-keyword-method parameter (:value) (&rest args)
   (apply #'make-instance 'single-parameter args))
 
 (define-keyword-method parameter (:value :perturbation) (&rest args)
   (apply #'make-instance 'perturbed-parameter args))
 
+(define-keyword-method parameter (:single-parameter :perturbation)
+    (&rest args &key single-parameter perturbation)
+  (declare (ignore args))
+  (perturb-parameter single-parameter perturbation))
+
 (define-keyword-method parameter (:children) (&rest args)
   (apply #'make-instance 'parameter-container args))
 
 (define-keyword-method parameter (:options) (&rest args)
   (apply #'make-instance 'parameter-options args))
+
+(define-keyword-method parameter (:children :number-of-instances)
+    (&rest args)
+  (apply #'make-instance 'parameter-broadcast args))
 
 ;; ** Traversing (remove?)
 (defgeneric traverse-parameter (parameter traversing-function)

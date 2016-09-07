@@ -112,6 +112,56 @@ Works with any kind of PARAMETER"
   (with-main-window (window (make-instance 'parameter-ui-window
                               :parameter parameter))))
 
+;; * Perturbed parameter
+(define-widget perturbed-parameter-ui (QObject parameter-ui)
+  ((perturbation :initform (q+:make-qlineedit))
+   (percent :initform (q+:make-qlabel))
+   (plusminus :initform (q+:make-qlabel)))
+  (:documentation
+   "UI component for perturbed parameter: similar to a
+single parameter but with an extra field provided for perturbation"))
+
+(defmethod initialize-instance :after ((object perturbed-parameter-ui) &key)
+  (with-slots (perturbation percent parameter plusminus) object
+    (setf (q+:text perturbation)
+          (format nil "~,1F"
+                  (* 100d0 (perturbed-parameter-perturbation parameter))))
+    (setf (q+:alignment perturbation) (q+:qt.align-right))
+    (setf (q+:text percent) "%")
+    (setf (q+:text plusminus) "±")))
+
+(define-slot (perturbed-parameter-ui perturbation) ((new-text string))
+  (declare (connected perturbation (text-changed string)))
+  (with-slots (parameter) perturbed-parameter-ui
+    (handler-case
+        (let ((new-number (parse-number new-text)))
+          (setf (perturbed-parameter-perturbation parameter)
+                (/ new-number 100d0))
+          (signal! perturbed-parameter-ui (parameter-changed)))
+      (error nil))))
+
+(defmethod make-ui ((object perturbed-parameter))
+  (make-instance 'perturbed-parameter-ui :parameter object))
+
+;; Add to an existing grid (for proper alignment)
+(defmethod add-to-grid ((object perturbed-parameter-ui) grid row column)
+  (with-slots (plusminus perturbation percent) object
+    (destructuring-bind (bottom right) (call-next-method)
+      (declare (ignore bottom))
+      (q+:add-widget grid plusminus row (+ right 1) 1 1)
+      (q+:add-widget grid perturbation row (+ right 2) 1 1)
+      (q+:add-widget grid percent row (+ right 3) 1 1)
+      (list (1+ row) (+ right 3)))))
+
+;; Was informed: parameter changed
+(defmethod update-parameter-view :after ((widget perturbed-parameter-ui))
+  (with-slots (perturbation parameter) widget
+    (setf (q+:text perturbation)
+          (format nil "~A"
+                  (* (perturbed-parameter-perturbation parameter)
+                     100d0)))))
+
+
 ;; * Parameter container UI
 ;; ** Class definition
 ;; Following the convention: PARAMETER-CONTAINER-UI is

@@ -1,4 +1,5 @@
 (in-package :cl-user)
+
 (defpackage parameters-test
   (:use :cl
         :parameters
@@ -9,7 +10,7 @@
 
 ;; NOTE: To run this test file, execute `(asdf:test-system :parameters)' in your Lisp.
 
-(plan 6)
+(plan 7)
 
 ;; * Floating-point comparison
 (defun approx= (x1 x2
@@ -65,6 +66,17 @@
    :constructor (lambda (x) (/ x 1000d0))
    :perturbation 0.2d0
    :description "Mass in g[ramms]. Instantiates in kg"))
+
+(subtest "Test conversion of single parameter to perturbed parameter"
+  (let ((mass (perturb-parameter! (make-single-parameter))))
+    (is-type mass 'perturbed-parameter
+             "Correct type")
+    (setf (perturbed-parameter-perturbation mass) 0.1d0)
+    (let* ((average-instance 0.1d0)
+           (result (loop repeat 100
+                      sum (abs (- (instantiate-object mass) average-instance)))))
+      (ok (> result 0d0)
+          "Instances are off average value"))))
 
 (subtest "Test perturbed parameter"
   (format t "Test perturbed parameter")
@@ -148,8 +160,6 @@
     (let ((result (instantiate-object temperature)))
       (ok (approx= (car result) 293.15d0)))))
 
-
-;; * Tests
 (subtest "PFR Phospine: Arrhenius law (Simple Parameter Container)"
   (format t "PFR Phospine: Arrhenius law (Simple Parameter Container)")
   (let ((arrhenius-law (make-phosphine-default-arrhenius-law))
@@ -186,6 +196,10 @@
                "Subobject of the instance is of the right type")
       (ok (approx= (inlet-flow-rate result) (/ 50d0 3600d0))
           "Changed value is propogated down to subparameter"))))
+
+(subtest "PFR: perturbed parameters"
+  (let ((pfr (make-default-pfr-phosphine)))
+    ))
 
 
 ;; Finally, this test combines the test on parameters and the model:

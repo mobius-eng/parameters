@@ -148,9 +148,15 @@ For options CONFIGURATION only describes the selected option. The selection is
 deduced based on :TYPE key which specifies selected PARAMETER-ID"))
 
 (defmethod update-parameter-from-config ((parameter single-parameter) configuration)
-  "Single parameter: only updates the value. The rest is ignored"
+  "Single parameter: only updates the value.
+If :PERTURBATION is present - upgrades the parameter to PERTURBED-PARAMETER
+The rest is ignored"
   (when configuration
-    (setf (parameter-value parameter) (getf configuration :value))))
+    (if (getf configuration :perturbation)
+        (progn
+          (change-class parameter 'perturbed-parameter :perturbation 0d0)
+          (update-parameter-from-config parameter configuration))
+        (setf (parameter-value parameter) (getf configuration :value)))))
 
 (defmethod update-parameter-from-config ((parameter perturbed-parameter) configuration)
   "Perturbed parameter: updates value and perturbation"
