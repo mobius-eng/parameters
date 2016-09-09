@@ -185,7 +185,7 @@ type ('type' id in YAML)"
   (when configuration
     (let ((type (make-keyword-id (getf configuration :type))))
       (format t "~&OPTIONS: TYPE ~A~%" type)
-      (loop for option across (parameter-options-options parameter)
+      (loop for option in (parameter-container-children parameter)
          for index from 0
          when (eq (parameter-id option) type)
          do (progn

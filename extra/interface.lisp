@@ -2,7 +2,6 @@
 
 (in-readtable :qtools)
 
-
 ;; * Generics
 (defgeneric update-parameter-view (view)
   (:documentation
@@ -261,7 +260,7 @@ single parameter but with an extra field provided for perturbation"))
 ;; Setups all features and connects the signals
 (defmethod initialize-instance :after ((instance parameter-options-ui) &key)
   (with-slots (parameter-options switches dialogs switches-group options-ui) instance
-    (loop for parameter across (parameter-options-options parameter-options)
+    (loop for parameter in (parameter-container-children parameter-options)
        for index from 0
        do (let ((parameter-ui (make-ui parameter))
                 (switch (q+:make-qradiobutton (parameter-name parameter)))

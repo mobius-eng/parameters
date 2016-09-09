@@ -10,7 +10,7 @@
 
 ;; NOTE: To run this test file, execute `(asdf:test-system :parameters)' in your Lisp.
 
-(plan 7)
+(plan 9)
 
 ;; * Floating-point comparison
 (defun approx= (x1 x2
@@ -20,7 +20,6 @@
     (<= (/ (abs (- x1 x2))
            (+ (* reltol x) abstol))
         1d0)))
-
 
 ;; * Single parameter
 
@@ -68,10 +67,11 @@
    :description "Mass in g[ramms]. Instantiates in kg"))
 
 (subtest "Test conversion of single parameter to perturbed parameter"
-  (let ((mass (perturb-parameter! (make-single-parameter))))
+  (let ((mass (perturb-parameter! (make-single-parameter) 0.1d0)))
     (is-type mass 'perturbed-parameter
              "Correct type")
-    (setf (perturbed-parameter-perturbation mass) 0.1d0)
+    (is (perturbed-parameter-perturbation mass) 0.1d0
+        "Perturbation successfully set")
     (let* ((average-instance 0.1d0)
            (result (loop repeat 100
                       sum (abs (- (instantiate-object mass) average-instance)))))
@@ -130,7 +130,6 @@
      :constructor (lambda (x) (+ (/ (- x 32d0) 1.8d0) 273.15d0))))
    :constructor (lambda (x) (cons x "Kelvin"))))
 
-
 (subtest "Test parameter options"
   (format t "Test parameter options")
   (let ((temperature (make-parameter-options)))
@@ -144,8 +143,8 @@
     (setf (parameter-value temperature) 100d0)
     (ok (= (parameter-value temperature) 100d0)
         "PARAMETER-VALUE returns newly set value")
-    (ok (= (parameter-value (aref (parameter-options-options temperature)
-                                  (parameter-options-selection temperature)))
+    (ok (= (parameter-value (elt (parameter-container-children temperature)
+                                 (parameter-options-selection temperature)))
            100d0)
         "The value of the selection has changed indeed"))
   (let ((temperature (make-parameter-options)))
@@ -177,6 +176,32 @@
              'arrhenius-law
              "Instance of PARAMETER-CONTAINER is of expected type")))
 
+;; * Parameter broadcast
+
+(defun make-broadcast-parameter ()
+  (parameter
+   :name "Temperature along the pipe"
+   :id :temperature-along-pipe
+   :number-of-instances 5
+   :children
+   (list (parameter :name "Temperature"
+                    :id :temperature
+                    :value 20d0
+                    :units "C"
+                    :constructor (lambda (x) (+ x 273.15d0))))))
+
+(subtest "Test broadcast parameter"
+  (let ((p (make-broadcast-parameter)))
+    (is (parameter-value (parameter-ref p :instances-number)) 5
+        "Instances number matches")
+    (let ((obj (instantiate-object p)))
+      (is-type (getf obj :temperature) 'cons)
+      (ok (approx= (first (getf obj :temperature))
+                   (+ 20d0 273.15d0))))))
+
+
+
+;; * Container parameter: PFR example
 ;; Container must instantiate objects recursively and the parameters
 ;; must be properly adjusted
 (subtest "PFR Phospine: Full (Complex Parameter Container)"
@@ -198,8 +223,26 @@
           "Changed value is propogated down to subparameter"))))
 
 (subtest "PFR: perturbed parameters"
-  (let ((pfr (make-default-pfr-phosphine)))
-    ))
+  (let ((pfr (make-default-pfr-phosphine))
+        (perturbations (list :inlet-flow-rate 0.1d0
+                             :rate-coefficient (list :activation-energy 0.2d0))))
+    (let ((pfr (perturb-parameter! pfr perturbations)))
+      (is-type (parameter-ref pfr :inlet-flow-rate) 'perturbed-parameter
+               "Perturbation affected type")
+      (is-type (parameter-ref pfr :final-conversion) 'single-parameter
+               "Unaffected parameter didn't change")
+      (is (perturbed-parameter-perturbation
+           (parameter-ref pfr :inlet-flow-rate))
+          0.1d0
+          "Perturbation level 1 was set")
+      (let ((arrhenius (parameter-ref pfr :rate-coefficient)))
+        (is-type (parameter-ref arrhenius :activation-energy)
+                 'perturbed-parameter
+                 "Nested perturbation affected type")
+        (is (perturbed-parameter-perturbation
+             (parameter-ref arrhenius :activation-energy))
+            0.2d0
+            "Nested perturbation was set")))))
 
 
 ;; Finally, this test combines the test on parameters and the model:

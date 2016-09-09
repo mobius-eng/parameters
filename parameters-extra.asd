@@ -21,6 +21,7 @@
   :depends-on (#:parameters
                #:cl-arrows #:keyword-dispatch
                #:cl-yaclyaml
+               #:parse-number
                #:qtools #:qtcore #:qtgui)
   :components ((:module
                 "extra"

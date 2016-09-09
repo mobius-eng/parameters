@@ -43,10 +43,10 @@
          0.1d0)
         "Child perturbation of the container was loaded")
     (let* ((operating-temperature (parameter-ref pfr :operating-temperature))
-           (selected-temperature (aref (parameter-options-options
-                                        operating-temperature)
-                                       (parameter-options-selection
-                                        operating-temperature))))
+           (selected-temperature (elt (parameter-container-children
+                                       operating-temperature)
+                                      (parameter-options-selection
+                                       operating-temperature))))
       (ok (string= (single-parameter-units selected-temperature) "F")
           "Child option: selection changed (units)")
       (ok (approx= (parameter-value (parameter-ref pfr :operating-temperature))

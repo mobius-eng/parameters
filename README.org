@@ -32,11 +32,15 @@ At the moment it is capable of setting:
      parameters. Container can represent the full model or part of
      it. For example, a full model of an ideal gas state may include
      volume, temperature, pressure and molarity.
-- Parameter options :: let the user choose between alternative
+- Parameter options :: lets the user choose between alternative
      models. For example, it may let the user choose between ideal gas
      model (for low pressures) and a real gas model (e. g. van der
      Waals). It can also be used if a single parameter allows for
      multiple units: the user can choose which units supply.
+- Parameter broadcast :: lets the user to define one parameter that
+     will be broadcast to a collection (list) of instances. This is
+     especially useful for perturbed parameters as the collection will
+     consist of values with the white noise added.
 
 Everything is defined using CLOS and thus user extensions are
 possible. The code is thoroughly documented if anyone wants to extend
@@ -90,8 +94,13 @@ The following was changed:
 - Tests were improved to cover more functionality.
 - YAML tests were added.
 - Documentation updated.
-- Interface functionality put on hold until =qt-libs= situation is
-  resolved.
+- Interface is working again with master branch of =qt-libs= (not in
+  Quicklisp yet, you will need to clone it separately). =qt-libs=
+  still contains the bug that may cause a crash under some
+  circumstances. The recipe to make it work for now: make sure no
+  Smoke and Smoke Qt bindings are installed (under Linux). It will
+  pull correct versions and load them automatically.
+- Parameter broadcast was added.
 
 * Future improvements
 

@@ -1,0 +1,246 @@
+#+TITLE: Parameter tutorial
+#+AUTHOR: Alexey Cherkaev
+#+LATEX_CLASS: article
+
+* Introduction
+
+Parameters are created with the "keyword-generic" function
+~PARAMETER~. For example, single parameter can be constructed as follows:
+
+#+BEGIN_SRC lisp :exports code
+  (ql:quickload :parameters)
+
+  (defpackage parameter-user
+    (:use #:cl #:parameters))
+#+END_SRC
+
+#+RESULTS:
+: #<PACKAGE "PARAMETER-USER">
+
+#+BEGIN_SRC lisp :exports both
+  (in-package parameter-user)
+
+  (parameter
+   :name "Mass"
+   :id :mass
+   :value 300d0
+   :units "g"
+   :constructor (lambda (x) (/ x 1000d0)))
+
+#+END_SRC
+
+#+RESULTS:
+: #<SINGLE-PARAMETER Mass (MASS) 300.0d0 g>
+
+A complex problem will usually require a set of parameters. These
+parameters can be nested into a container structure
+~PARAMETER-CONTAINER~:
+
+#+BEGIN_SRC lisp :exports both
+  (in-package parameter-user)
+
+  (parameter
+   :name "Ideal gas law parameters"
+   :id :ideal-gas
+   :children
+   (list
+    (parameter
+     :name "Temperature"
+     :id :temperature
+     :value 30d0
+     :units "C"
+     :constructor (lambda (x) (+ x 273.15d0)))
+    (parameter
+     :name "Volume"
+     :id :volume
+     :value 2d0
+     :units "m3")
+    (parameter
+     :name "Pressure"
+     :id :pressure
+     :value 1.5d0
+     :units "bar"
+     :description "Gas pressure in bar"
+     :constructor (lambda (x) (* x 1d5)))))
+#+END_SRC
+
+#+RESULTS:
+: #<PARAMETER-CONTAINER Ideal gas law parameters (IDEAL-GAS)
+:                       (#<SINGLE-PARAMETER Temperature (TEMPERATURE) 30.0d0 C>
+:                        #<SINGLE-PARAMETER Volume (VOLUME) 2.0d0 m3>
+:                        #<SINGLE-PARAMETER Pressure (PRESSURE) 1.5d0 bar>)>
+
+
+Each parameter is identified by two compulsory arguments ~:NAME~ and
+~:ID~. Optional parameter ~:DESCRIPTION~ provides a longer explanation
+of the parameter meaning or usage (defaults to an empty
+string). Optional ~:CONSTRUCTOR~ provides a way of transforming
+parameter value to actual instance. In example above, for example,
+pressure parameter is provided in bars, but calculations will,
+probably, require it in Pa. ~:CONSTRUCTOR (LAMBDA (X) (* X 1D5))~
+entry provides the conversion. Single-value parameters default the
+constructor to identity function. Parameter container does it slightly
+differently: most of the time you would want to create a class or
+structure instance. To simplify the matter, the default constructor
+has a form ~(LAMBDA(&REST ARGS) ARGS)~.
+
+Function ~PARAMETER~ descriminates between the type of parameters
+based on the set of keywords provided. Some keywords cannot appear as
+an argument together (for example, ~:VALUE~ and ~:CHILDREN~) as the
+type of the parameter becomes ambigious.
+
+Before looking at all different types of the parameters, consider the
+following example with ideal gas law system:
+
+#+BEGIN_SRC lisp :exports code
+  (in-package parameter-user)
+
+  (defstruct idealgas
+    "Ideal gas representation structure"
+    temperature
+    pressure
+    volume)
+
+  (defvar *p*
+    (parameter
+     :name "Ideal gas law parameters"
+     :id :ideal-gas
+     :children
+     (list
+      (parameter
+       :name "Temperature"
+       :id :temperature
+       :value 30d0
+       :units "C"
+       :constructor (lambda (x) (+ x 273.15d0)))
+      (parameter
+       :name "Volume"
+       :id :volume
+       :value 2d0
+       :units "m3")
+      (parameter
+       :name "Pressure"
+       :id :pressure
+       :value 1.5d0
+       :units "bar"
+       :description "Gas pressure in bar"
+       :constructor (lambda (x) (* x 1d5))))
+     :constructor #'make-idealgas))
+#+END_SRC
+
+#+RESULTS:
+: *P*
+
+Ideal gas object can be instantiated using ~INSTANTIATE-OBJECT~
+generic function: it will instantiate all subparameters (using their
+respective constructors) and then instantiate the container:
+
+#+BEGIN_SRC lisp :exports both
+  (in-package parameter-user)
+
+  (instantiate-object *p*)
+#+END_SRC
+
+#+RESULTS:
+: #S(IDEALGAS :TEMPERATURE 303.15d0 :PRESSURE 150000.0d0 :VOLUME 2.0d0)
+
+Notice, how the temperature is in Kelvin and the pressure is in Pa in
+the instance object.
+
+* Parameter types
+
+** Single parameter
+The most basic parameter type. Function ~PARAMETER~ chooses to create
+it if keyword argument ~:VALUE~ is present (but not ~:PERTURBATION~,
+see further below). Constructor, by default, is identity function.
+
+** Parameter container
+This parameter contains other parameters. Keyword argument ~:CHILDREN~
+shows if this type parameter needs to be constructed. Default
+constructor returns a plist of children ~(CHILD1-ID
+CHILD1-INSTANCE...)~. Constructor's signature is expected to be ~(LAMBDA
+(&REST ARGS) ...)~. It provides an extra method ~PARAMETER-REF~ that
+lets to reference a child subparameter by ~:ID~.
+
+(In ML terms, this would represent a dynamic description of a /record type/)
+
+** Parameter options
+Similar to container, but is treated as a discriminated union of
+subparameters. ~PARAMETER-SELECTION~ (~SETF~-able) specifies the index
+of selected subparameter. When instantiated, instantiates only the
+selected option. Constructor defaults to identity function. Is useful,
+for example, when the value can be provided in different units of
+measure or when the whole set of models can be alternated. Keyword
+argument ~:OPTIONS~ or the set of ~:CHILDREN~ and ~:SELECTION~ in
+function ~PARAMETER~ will create this type.
+
+(In ML terms, this would represent a discriminated union type)
+
+** Perturbed parameter
+Perturbed parameter is similar to single parameter but when
+instantiated adds a (random) white noise of specified
+intensity. The set of keywords ~:VALUE~ and ~:PERTURBATION~ will
+create this parameter type via ~PARAMETER~ function.
+
+** Parameter broadcast
+Similar to parameter container it allows specifying the set of
+subparameters, but they will be broadcast specified number of times
+forming lists at the time of instantiation. it is useful together with
+perturbed parameter to specify the collection of values that have some
+uncertainty about their values. The set of keyword arguments
+~:CHILDREN~ and ~:NUMBER-OF-INSTANCES~ will cause this parameter to be
+created in ~PARAMETER~ function. In essence, it adds an extra single
+parameter to children with ~:ID :INSTANCES-NUMBER~. It applies the
+constructor to all the children as parameter container (except now in
+place of each child value is the list of child values).
+
+* Parameter API
+
+** Basic
+
+Each parameter implements the following (generic) functions
+
+- These are implemented automatically by inhereting from
+  =PARAMETER-BASE=:
+  - =PARAMETER-NAME= :: name of the parameter (with =SETF=)
+  - =PARAMETER-ID= :: id of the parameter (with =SETF=)
+  - =PARAMETER-DESCRIPTION= :: longer description of the parameter (with =SETF=)
+  - =PARAMETER-PARENT= :: parent of the parameter (with =SETF=)
+  - =PARAMETER-CONSTRUCTOR= :: constructor of actual value out of the
+       parameter (with =SETF=)
+- These need to be implemented specially:
+  - =INSTANTIATE-OBJECT= :: produces actual object out of
+       parameter. Default implementation is provided as the call of
+       the constructor on parameter value ~PARAMETER-VALUE~.
+  - =PARAMETER-VALUE= :: gets the raw (uninstantiated) parameter value
+       (with ~SETF~, although there is no practical value in setting
+       the values of, for example, parameter-container, but it is
+       provided for consistency)
+
+Some parameter provide extra functions:
+
+- ~SINGLE-PARAMETER~ and ~PERTURBED-PARAMETER~ ::
+     ~SINGLE-PARAMETER-UNITS~ (~SETF~-able)
+- ~PERTURBED-PARAMETER~ :: ~PERTURBED-PARAMETER-PERTURBATION~
+     (~SETF~-able)
+- ~PARAMETER-CONTAINER~ (and its children) ::
+     ~PARAMETER-CONTAINER-CHILDREN~ (*NOT* ~SETF~-able) and
+     ~PARAMETER-REF~ (*NOT* ~SETF~-able)
+- ~PARAMETER-OPTIONS~ :: ~PARAMETER-OPTIONS-SELECTION~ (~SETF~-able),
+     returns the index of current selection.
+
+** ~PERTURB-PARAMETER!~ function
+
+This function exists to transform single parameters to perturbed
+ones. It can be applied to container-type parameters, in which case it
+requires nested plist of parameters that need to be perturbed with
+corresponding perturbation values.
+
+** ~TRAVERSE-PARAMETER~ function
+
+Experimental, not sure if useful.
+
+* Practical example
+
+For a practical example see =pfr.lisp= file in test directory and
+=pfr.pdf= in documentation directory.

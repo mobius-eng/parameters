@@ -1,7 +1,7 @@
 (in-package cl-user)
 
 (defpackage #:parameters-yaml
-  (:use #:cl #:parameters #:cl-arrows #:alexandria)
+  (:use #:cl #:parameters #:cl-arrows)
   (:export
    #:*annotations*
    #:*keyword-value-keys*

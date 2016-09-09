@@ -1,3 +1,5 @@
+;; * Parameters setting framework
+;; ** Package declaration
 (in-package :cl-user)
 
 (defpackage parameters
@@ -11,7 +13,7 @@
            #:single-parameter-units
            #:perturbed-parameter #:perturbed-parameter-perturbation
            #:perturb-parameter!
-           #:parameter-options #:parameter-options-options
+           #:parameter-options
            #:parameter-options-selection
            #:parameter-container #:parameter-container-children
            #:parameter-broadcast
@@ -20,8 +22,6 @@
            #:traverse-parameter))
 
 (in-package :parameters)
-
-;; * Parameters setting framework
 
 ;; ** Some utils 
 (defun replace-characters (string parts replacement &key (test #'char=))
@@ -150,7 +150,7 @@ Not all kinds of parameter might allow for it!"))
     :initarg :units
     :initform "-"
     :type string
-    :reader single-parameter-units
+    :accessor single-parameter-units
     :documentation "Parameter units of measure"))
   (:documentation "Single parameter representation"))
 
@@ -214,64 +214,18 @@ set when the object is instantiated is VALUE +/- RANDOM(PERTURBATION) * 100%"))
   (:documentation
    "Destructively perturb parameter with given perturbation level."))
 
-(defmethod perturb-parameter! ((parameter single-parameter) (perturbation double-float))
+(defmethod perturb-parameter! ((parameter single-parameter)
+                               #+clisp
+                               (perturbation number)
+                               #-clisp
+                               (perturbation double-float))
   "Destructively change PARAMETER to become perturbed with PERTURBATION"
   (change-class parameter 'perturbed-parameter :perturbation perturbation))
 
-(defmethod perturb-parameter! ((parameter perturbed-parameter) (perturbation double-float))
+(defmethod perturb-parameter! ((parameter perturbed-parameter)
+                               #+clisp (perturbation number)
+                               #-clisp (perturbation double-float))
   (setf (perturbed-parameter-perturbation parameter) perturbation))
-
-;; ** Parameter-container-of-options
-(defclass parameter-options (parameter-base)
-  ((options
-    :initarg :options
-    :reader parameter-options-options
-    :documentation "A vector of parameter options")
-   (selection
-    :initarg :selection
-    :initform 0
-    :accessor parameter-options-selection
-    :documentation "Index of the current selection"))
-  (:documentation "Selection of alternative parameters (OPTIONS).
-Is useful if alternative models are possible. PARAMETER-VALUE will return
-current selection.
-When constructed, OPTIONS must be supplied as a list,
-but it will be stored in a vector!"))
-
-(defmethod initialize-instance :after ((object parameter-options) &key)
-  (with-slots (options) object
-    (mapc (lambda (option)
-            (setf (parameter-parent option) object))
-          options)
-    (setf options (apply #'vector options))))
-
-(defmethod print-object ((object parameter-options) out)
-  (print-unreadable-object (object out :type t)
-    (with-slots (name id options selection) object
-      (format out "~@<~A (~A) ~:_~A~:>"
-              name id (parameter-value object)))))
-
-(defmethod parameter-value ((parameter parameter-options))
-  "Returns the value of the current selection among options"
-  (with-slots (options selection) parameter
-    (parameter-value (aref options selection))))
-
-(defmethod (setf parameter-value) (newvalue (parameter parameter-options))
-  "SETF the value of the current selection"
-  (with-slots (options selection) parameter
-    (setf (parameter-value (aref options selection)) newvalue)))
-
-(defmethod instantiate-object ((parameter parameter-options))
-  (with-slots (options selection) parameter
-    (let ((selected-parameter (aref options selection)))
-      (funcall (parameter-constructor parameter)
-               (instantiate-object selected-parameter)))))
-
-(defmethod perturb-parameter! ((parameter parameter-options) (perturbation list))
-  "Perturb options of the PARAMETER according to PERTURBATION"
-  (with-slots (options) parameter
-    (perturb-parameter! (aref options selection) perturbation)
-    parameter))
 
 ;; ** Parameter-container of other parameters
 ;; =CHILDREN= are the vector of =PARAMETER= (or it subclass =PARAMETER-OPTIONS=)
@@ -335,12 +289,49 @@ but it will be stored in a vector!"))
                              children)))
       (apply (parameter-constructor parameter) children-objects))))
 
-(defmethod perturb-parameter! ((parameter parameter-container) &optional (perturbation 0d0))
-  "Perturb all children"
-  (with-slots (children) parameter
-    (dolist (child children parameter)
-      (perturb-parameter! child perturbation))))
+(defmethod perturb-parameter! ((parameter parameter-container) (perturbation list))
+  "Perturb all children if perturbation containes corresponding entries"
+  (when perturbation
+    (with-slots (children) parameter
+      (dolist (child children parameter)
+        (when (getf perturbation (parameter-id child))
+          (perturb-parameter! child (getf perturbation (parameter-id child))))))))
 
+;; ** Parameter-container-of-options
+(defclass parameter-options (parameter-container)
+  ((selection
+    :initarg :selection
+    :initform 0
+    :accessor parameter-options-selection
+    :documentation "Index of the current selection")
+   (constructor :initform #'identity))
+  (:documentation "Selection of alternative parameters (OPTIONS).
+Is useful if alternative models are possible. PARAMETER-VALUE will return
+current selection.
+When constructed, OPTIONS must be supplied as a list,
+but it will be stored in a vector!"))
+
+(defmethod print-object ((object parameter-options) out)
+  (print-unreadable-object (object out :type t)
+    (with-slots (name id children selection) object
+      (format out "~@<~A (~A) ~:_~A~:>"
+              name id (parameter-value object)))))
+
+(defmethod parameter-value ((parameter parameter-options))
+  "Returns the value of the current selection among options"
+  (with-slots (children selection) parameter
+    (parameter-value (elt children selection))))
+
+(defmethod (setf parameter-value) (newvalue (parameter parameter-options))
+  "SETF the value of the current selection"
+  (with-slots (children selection) parameter
+    (setf (parameter-value (elt children selection)) newvalue)))
+
+(defmethod instantiate-object ((parameter parameter-options))
+  (with-slots (children selection) parameter
+    (let ((selected-parameter (elt children selection)))
+      (funcall (parameter-constructor parameter)
+               (instantiate-object selected-parameter)))))
 
 ;; ** Parameter broadcast
 (defclass parameter-broadcast (parameter-container)
@@ -362,6 +353,7 @@ Extra arguments for MAKE-INSTANCE:
        (number-description
         "Number of broadcasted instances to create")
        &allow-other-keys)
+  "Adds the number of instances (for broadcasting) to the list of children"
   (let* ((p (parameter :name number-name
                        :id :instances-number
                        :value number-of-instances
@@ -392,13 +384,22 @@ Extra arguments for MAKE-INSTANCE:
 (define-keyword-method parameter (:single-parameter :perturbation)
     (&rest args &key single-parameter perturbation)
   (declare (ignore args))
-  (perturb-parameter single-parameter perturbation))
+  (perturb-parameter! single-parameter perturbation))
 
 (define-keyword-method parameter (:children) (&rest args)
   (apply #'make-instance 'parameter-container args))
 
-(define-keyword-method parameter (:options) (&rest args)
+(define-keyword-method parameter (:children :selection) (&rest args)
   (apply #'make-instance 'parameter-options args))
+
+(define-keyword-method parameter (:options) (&rest args)
+  (let ((args (loop for (key value) on args by #'cddr
+                 if (eq key :options)
+                 append (list :children value)
+                 else
+                 append (list key value)
+                 end)))
+   (apply #'make-instance 'parameter-options args)))
 
 (define-keyword-method parameter (:children :number-of-instances)
     (&rest args)
@@ -421,5 +422,5 @@ value on PARAMETER, will traverse all subparameters in depth-first order"))
 
 (defmethod traverse-parameter ((parameter parameter-options) traversing-function)
   (if (funcall traversing-function parameter)
-      (loop for option across (parameter-options-options parameter)
+      (loop for option across (parameter-container-children parameter)
          do (funcall traversing-function option))))
