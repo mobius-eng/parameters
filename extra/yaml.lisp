@@ -173,6 +173,7 @@ The rest is ignored"
 
 (defmethod update-parameter-from-config ((parameter parameter-container) configuration)
   "Container: updates each subparameter (if present in CONFIGURATION)"
+  (vom:info "~%~TParameter: ~A~%~TConfig: ~A" parameter configuration)
   (when configuration
     (loop for subparameter in (parameter-container-children parameter)
        do (update-parameter-from-config
